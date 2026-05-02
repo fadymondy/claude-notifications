@@ -276,14 +276,16 @@ app.whenReady().then(() => {
   // Hide the dock icon on macOS — we're a tray app, not a windowed app.
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
-  // Build a Retina-aware colored tray icon. We add the 2x representation so
-  // the icon stays crisp on HiDPI displays. Template mode is OFF on purpose:
-  // we want the branded orange bell + red dot to read on every menubar.
+  // Build a Retina-aware monochrome tray icon. We add the 2x representation
+  // for HiDPI displays and mark it as a template image on macOS so the OS
+  // auto-inverts it to match the menubar (dark in light mode, white in dark
+  // mode) — same behavior as built-in icons like Wi-Fi or battery.
   const img = nativeImage.createFromBuffer(trayIconBuffer(), { width: 22, height: 22 });
   img.addRepresentation({
     width: 22, height: 22, scaleFactor: 2.0,
     buffer: trayIcon2xBuffer(),
   });
+  if (process.platform === 'darwin') img.setTemplateImage(true);
 
   tray = new Tray(img);
   refreshTray();

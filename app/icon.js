@@ -1,11 +1,16 @@
 // Procedural PNG icon generator for the runtime tray.
 //
-// Produces a 22x22 (and a 44x44 @2x) full-color branded bell with the red
-// notification badge — the same logo used in the app sidebar and packaged
-// builds, just smaller. The tray no longer uses template-image mode; the
-// colored brand reads better against any menubar.
+// Produces a monochrome (black-on-transparent) bell silhouette modeled on the
+// Boxicons `bxs-bell` glyph — sized for the macOS menubar / Windows tray /
+// Linux panel. The tray uses template-image mode on macOS so the OS auto-
+// inverts the icon to match the menubar (dark in light mode, white in dark
+// mode), exactly like the system icons (Wi-Fi, battery, etc.).
 //
-// Returns a Buffer suitable for `nativeImage.createFromBuffer`.
+// The colored brand bell + notification dot lives in build/generate-icons.js
+// instead — that's the dock / installer / about-window icon.
+//
+// Returns a Buffer suitable for `nativeImage.createFromBuffer`. Provides a 1x
+// (22px) and a 2x (44px) representation for HiDPI menubars.
 
 const zlib = require('zlib');
 
@@ -42,78 +47,74 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
-// Same primitives as build/generate-icons.js — kept in sync intentionally.
-const Y_TOP = 0.18, Y_BODY_TOP = 0.22, Y_BODY_BOT = 0.66, Y_RIM = 0.72, Y_CLAPPER = 0.85;
-const W_TOP = 0.30, W_BOT = 0.66;
-const DOT_CX = 0.78, DOT_CY = 0.22, DOT_R = 0.13;
-
+// Boxicons bxs-bell silhouette, recreated procedurally so we don't need an SVG
+// rasterizer. The shape is a single solid bell glyph — no notification badge
+// (the badge is in the colored app/dock icon instead). Coordinates are in
+// [0,1] where (0,0) is top-left of the canvas. Tweaked so the glyph reads
+// well at 22px / 44px on a menubar.
+//
+// Body is a rounded "U" with curved shoulders, a small stem on top, a wider
+// rim band at the bottom, and a small clapper hanging below.
 function bellCoverage(u, v) {
-  if (v >= Y_TOP && v <= Y_BODY_TOP + 0.01) {
-    if (Math.abs(u - 0.5) <= 0.05) return 1 - smoothstep(0.04, 0.05, Math.abs(u - 0.5));
+  // Translate u into bell-local x: 0 = vertical centerline.
+  const x = u - 0.5;
+
+  // 1. Top stem (small rectangle joining the bell to the centerline).
+  if (v >= 0.10 && v <= 0.18) {
+    const halfW = 0.06;
+    const dist = Math.abs(x) - halfW;
+    return 1 - smoothstep(-0.005, 0.012, dist);
   }
-  if (v >= Y_BODY_TOP && v <= Y_BODY_BOT) {
-    const t = (v - Y_BODY_TOP) / (Y_BODY_BOT - Y_BODY_TOP);
-    const widthAtRow = W_TOP + t * (W_BOT - W_TOP);
-    return 1 - smoothstep(widthAtRow / 2 - 0.005, widthAtRow / 2 + 0.012, Math.abs(u - 0.5));
+
+  // 2. Bell body — flares from W_TOP at the shoulders to W_BOT at the rim.
+  // Use a slightly curved profile so the silhouette looks more like the
+  // Boxicons bell than a straight trapezoid.
+  if (v >= 0.18 && v <= 0.65) {
+    const t = (v - 0.18) / (0.65 - 0.18);     // 0..1 down the body
+    // Curve out gently at first, then flare more aggressively near the rim.
+    const widthAtRow = 0.30 + 0.32 * Math.pow(t, 0.85);
+    const dist = Math.abs(x) - widthAtRow / 2;
+    return 1 - smoothstep(-0.005, 0.012, dist);
   }
-  if (v >= Y_BODY_BOT && v <= Y_RIM) {
-    return 1 - smoothstep(0.41, 0.43, Math.abs(u - 0.5));
+
+  // 3. Rim — wider band at the bottom of the body that gives the bell its flare.
+  if (v >= 0.65 && v <= 0.74) {
+    // Slightly pinched at top of rim, full width at bottom.
+    const t = (v - 0.65) / 0.09;
+    const halfW = 0.42 + 0.04 * t;
+    const dist = Math.abs(x) - halfW;
+    return 1 - smoothstep(-0.005, 0.012, dist);
   }
+
+  // 4. Rim bottom edge curve — small radius rounding so the bottom of the
+  // rim isn't visually flat.
+  if (v >= 0.74 && v <= 0.78) {
+    const cy = 0.74;
+    const halfW = 0.46;
+    if (Math.abs(x) <= halfW - 0.02) {
+      const dy = v - cy;
+      return 1 - smoothstep(0.04 - 0.005, 0.04 + 0.012, dy);
+    }
+  }
+
+  // 5. Clapper — small ellipse hanging below the rim.
   if (v >= 0.78 && v <= 0.92) {
-    const dx = u - 0.5, dy = v - Y_CLAPPER;
-    const d = Math.sqrt((dx / 0.06) ** 2 + (dy / 0.05) ** 2);
+    const dx = x;
+    const dy = v - 0.85;
+    const d = Math.sqrt((dx / 0.07) ** 2 + (dy / 0.06) ** 2);
     return 1 - smoothstep(0.95, 1.05, d);
   }
+
   return 0;
 }
 
-function dotCoverage(u, v) {
-  const dx = u - DOT_CX, dy = v - DOT_CY;
-  const r = Math.sqrt(dx * dx + dy * dy);
-  return 1 - smoothstep(DOT_R - 0.005, DOT_R + 0.01, r);
-}
-
-function dotInnerCoverage(u, v) {
-  const dx = u - DOT_CX, dy = v - DOT_CY;
-  const r = Math.sqrt(dx * dx + dy * dy);
-  return 1 - smoothstep(DOT_R * 0.32, DOT_R * 0.42, r);
-}
-
 function blendPixel(u, v) {
-  const bell = bellCoverage(u, v);
-  const dot = dotCoverage(u, v);
-  const dotInner = dotInnerCoverage(u, v);
-
-  const bellTop = [255, 138, 61];
-  const bellBot = [217, 96, 39];
-  const bellMix = Math.max(0, Math.min(1, (v - Y_TOP) / (Y_CLAPPER - Y_TOP)));
-  const bellColor = bellTop.map((c, i) => Math.round(c * (1 - bellMix) + bellBot[i] * bellMix));
-
-  const dotOuter = [194, 41, 63];
-  const dotOuterTop = [255, 92, 99];
-  const dotMix = Math.max(0, Math.min(1, (v - (DOT_CY - DOT_R)) / (2 * DOT_R)));
-  const dotColor = dotOuterTop.map((c, i) => Math.round(c * (1 - dotMix) + dotOuter[i] * dotMix));
-  const whiteCenter = [255, 255, 255];
-
-  let r = 0, g = 0, b = 0, a = 0;
-  if (bell > 0) { r = bellColor[0]; g = bellColor[1]; b = bellColor[2]; a = Math.round(bell * 255); }
-  if (dot > 0) {
-    const da = Math.round(dot * 255);
-    const fa = da / 255;
-    r = Math.round(dotColor[0] * fa + r * (1 - fa));
-    g = Math.round(dotColor[1] * fa + g * (1 - fa));
-    b = Math.round(dotColor[2] * fa + b * (1 - fa));
-    a = Math.max(a, da);
-  }
-  if (dotInner > 0) {
-    const ia = Math.round(dotInner * 220);
-    const fa = ia / 255;
-    r = Math.round(whiteCenter[0] * fa + r * (1 - fa));
-    g = Math.round(whiteCenter[1] * fa + g * (1 - fa));
-    b = Math.round(whiteCenter[2] * fa + b * (1 - fa));
-    a = Math.max(a, ia);
-  }
-  return [r, g, b, a];
+  const cov = bellCoverage(u, v);
+  if (cov <= 0) return [0, 0, 0, 0];
+  const a = Math.round(cov * 255);
+  // Pure black RGB; alpha carries the antialiased coverage. macOS template
+  // mode reads only the alpha channel and recolors the icon for the menubar.
+  return [0, 0, 0, a];
 }
 
 function buildPng(size) {
