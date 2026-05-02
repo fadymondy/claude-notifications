@@ -18,7 +18,9 @@ export function ChannelSidebar({ channels, config, active, onSelect, version, pl
   return (
     <aside className="flex h-full w-60 flex-col border-r bg-card">
       <header className="flex items-center gap-3 border-b px-4 py-3.5">
-        <Logo size={36} className="rounded-md shadow-sm shrink-0" />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+          <Logo size={22} />
+        </span>
         <div className="min-w-0">
           <div className="text-sm font-semibold leading-tight">Claude Notifications</div>
           <div className="text-[11px] text-muted-foreground mt-0.5">

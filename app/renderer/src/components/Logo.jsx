@@ -1,50 +1,44 @@
-// Branded SVG logo. Rendered inline as a React component so we can size it
-// freely and so it ships with the JS bundle (no separate asset to load).
+// Branded logo — Boxicons bxs-bell shape (same path as the tray icon),
+// rendered in the brand primary color via `currentColor` so it picks up the
+// theme's accent. A small notification dot in the destructive/red shade keeps
+// the brand mark distinct from a generic bell icon.
+//
+// Single-color flat fill matches the lucide-react iconography used elsewhere
+// in the UI — no gradients or drop shadows, so the logo blends with the
+// channel icons in the sidebar.
 
-export function Logo({ size = 40, className = '', muted = false }) {
-  const id = `cn-${Math.random().toString(36).slice(2, 8)}`;
+export function Logo({ size = 40, className = '', withDot = true }) {
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 64 64"
+      viewBox="0 0 24 24"
       role="img"
       aria-label="Claude Notifications"
       className={className}
+      style={{ color: 'hsl(var(--primary))' }}
     >
-      <defs>
-        <linearGradient id={`${id}-bell`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor={muted ? '#9aa3b2' : '#ff8a3d'} />
-          <stop offset="100%" stopColor={muted ? '#5b6473' : '#d96027'} />
-        </linearGradient>
-        <linearGradient id={`${id}-dot`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ff5c63" />
-          <stop offset="100%" stopColor="#c2293f" />
-        </linearGradient>
-        <filter id={`${id}-shadow`} x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="2" floodColor="#000" floodOpacity="0.18" />
-        </filter>
-      </defs>
-
-      <circle cx="32" cy="34" r="26" fill="none" stroke={`url(#${id}-bell)`} strokeOpacity="0.18" strokeWidth="2" />
-
-      <g filter={`url(#${id}-shadow)`}>
-        <rect x="29" y="9" width="6" height="6" rx="2" fill={`url(#${id}-bell)`} />
-        <path
-          d="M16 41 L16 29 C16 22 20 16 26 14.5 A6 6 0 0 1 38 14.5 C44 16 48 22 48 29 L48 41 L51 45 A1.5 1.5 0 0 1 49.5 47 L14.5 47 A1.5 1.5 0 0 1 13 45 Z"
-          fill={`url(#${id}-bell)`}
-        />
-        <path
-          d="M22 28 C22 22 26 18 32 18 C32 18 28 21 26 26 C24.5 30 24 35 24 38 Z"
-          fill="#fff"
-          fillOpacity="0.18"
-        />
-        <ellipse cx="32" cy="52" rx="4" ry="3.5" fill={`url(#${id}-bell)`} />
-      </g>
-
-      <circle cx="48" cy="14" r="8" fill={`url(#${id}-dot)`} />
-      <circle cx="48" cy="14" r="8" fill="none" stroke="#0f1115" strokeOpacity="0.4" strokeWidth="1.5" />
-      <circle cx="48" cy="14" r="2.5" fill="#fff" fillOpacity="0.85" />
+      {/* Boxicons bxs-bell path (MIT, atisawd/boxicons) */}
+      <path
+        fill="currentColor"
+        d="M12 22c1.103 0 2-.897 2-2h-4c0 1.103.897 2 2 2zm7-7.414V10c0-3.217-2.185-5.927-5.145-6.742C13.562 2.52 12.846 2 12 2s-1.562.52-1.855 1.258C7.185 4.073 5 6.783 5 10v4.586l-1.707 1.707A.996.996 0 0 0 3 17v1a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-1a.996.996 0 0 0-.293-.707L19 14.586z"
+      />
+      {withDot && (
+        <>
+          {/* Notification badge — small destructive-colored dot in the upper-right.
+              Stroke matches the card background so the dot reads as floating
+              over the bell rather than glued to it. */}
+          <circle cx="18.5" cy="5.5" r="3.5" fill="hsl(var(--destructive))" />
+          <circle
+            cx="18.5"
+            cy="5.5"
+            r="3.5"
+            fill="none"
+            stroke="hsl(var(--card))"
+            strokeWidth="1.2"
+          />
+        </>
+      )}
     </svg>
   );
 }
