@@ -2,6 +2,9 @@
 // renders forms dynamically, persists changes back to ~/.claude-notifications/config.json.
 
 const $ = (sel) => document.querySelector(sel);
+
+// el(tag, attrs, ...children). Children may be strings (text), DOM nodes, or
+// `{html}` wrappers when raw markup is needed (used for inline icon SVGs).
 const el = (tag, attrs = {}, ...children) => {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -13,16 +16,25 @@ const el = (tag, attrs = {}, ...children) => {
   }
   for (const c of children) {
     if (c == null) continue;
-    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    if (typeof c === 'string') node.appendChild(document.createTextNode(c));
+    else if (c.__html) {
+      const tmp = document.createElement('span');
+      tmp.innerHTML = c.__html;
+      while (tmp.firstChild) node.appendChild(tmp.firstChild);
+    }
+    else node.appendChild(c);
   }
   return node;
 };
+const html = (markup) => ({ __html: markup });
+const icon = (name, size) => html(window.cnIcons.svg(name, { size: size || 16 }));
 
 let CHANNELS = [];
 let EVENTS = [];
 let CONFIG = { channels: {} };
 let ACTIVE = null;
 let DIRTY = false;
+let APP_INFO = {};
 
 // --- Helpers for nested-key field paths --------------------------------------
 function getPath(obj, path) {
@@ -44,11 +56,18 @@ async function init() {
   const [info, channels, events, cfg] = await Promise.all([
     cn.appInfo(), cn.schemaChannels(), cn.schemaEvents(), cn.readConfig(),
   ]);
+  APP_INFO = info;
   CHANNELS = channels;
   EVENTS = events;
   CONFIG = cfg.channels ? cfg : { channels: {} };
 
   $('#version').textContent = `v${info.version} • ${info.platform}`;
+
+  // Inflate icons in static template buttons (data-icon -> SVG).
+  document.querySelectorAll('[data-icon]').forEach(node => {
+    node.innerHTML = window.cnIcons.svg(node.dataset.icon, { size: 14 });
+  });
+
   if (!info.pluginRoot) {
     setStatus('Plugin not detected — install with: claude plugin install claude-notifications@claude-notifications', 'error');
   }
@@ -86,7 +105,7 @@ function renderSidebar() {
       onclick: () => selectChannel(def.id),
       onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectChannel(def.id); } },
     },
-      el('span', { class: 'dot' }),
+      el('span', { class: 'channel-icon' }, html(window.cnIcons.channelIcon(def.id))),
       el('span', { class: 'name' }, def.label),
       enabled ? el('span', { class: 'badge' }, 'on') : null,
     );
@@ -105,7 +124,9 @@ function selectChannel(id) {
   $('#channel-title').textContent = def.label;
   $('#channel-summary').textContent = def.summary;
   $('#events-channel-name').textContent = def.label;
+  $('#setup-channel-name').textContent = def.label;
   renderForm(def);
+  renderSetup(def);
   renderEvents(def);
   renderSidebar();
   clearStatus();
@@ -121,6 +142,8 @@ function renderForm(def) {
 
     if (f.type === 'toggle') {
       const checked = (getPath(channelCfg, f.key) ?? f.default) === true;
+      wrap.classList.add('field-toggle');
+      wrap.classList.add('field-full');
       const inp = el('input', { type: 'checkbox', id: `f-${f.key}` });
       inp.checked = checked;
       inp.addEventListener('change', () => {
@@ -130,9 +153,9 @@ function renderForm(def) {
         if (f.key === 'enabled') renderSidebar();
         applyConditionalVisibility(def, channelCfg);
       });
-      wrap.classList.add('toggle');
-      wrap.appendChild(inp);
+      const switchWrap = el('span', { class: 'toggle-switch' }, inp);
       wrap.appendChild(el('label', { for: `f-${f.key}` }, f.label));
+      wrap.appendChild(switchWrap);
     } else if (f.type === 'select') {
       wrap.appendChild(el('label', { for: `f-${f.key}` }, f.label));
       const sel = el('select', { id: `f-${f.key}` });
@@ -143,9 +166,11 @@ function renderForm(def) {
         CONFIG.channels[def.id] = channelCfg;
         DIRTY = true;
         applyConditionalVisibility(def, channelCfg);
+        renderSetup(def); // setup steps may change with provider
       });
       wrap.appendChild(sel);
     } else if (f.type === 'list') {
+      wrap.classList.add('field-full');
       wrap.appendChild(el('label', { for: `f-${f.key}` }, f.label));
       const ta = el('textarea', { id: `f-${f.key}`, placeholder: f.placeholder || 'one per line' });
       const arr = getPath(channelCfg, f.key);
@@ -164,6 +189,8 @@ function renderForm(def) {
         type: f.type === 'number' ? 'number' : (f.type === 'password' ? 'password' : 'text'),
         id: `f-${f.key}`,
         placeholder: f.placeholder || '',
+        spellcheck: 'false',
+        autocapitalize: 'off',
       });
       const cur = getPath(channelCfg, f.key);
       inp.value = cur ?? '';
@@ -193,6 +220,52 @@ function applyConditionalVisibility(def, channelCfg) {
   }
 }
 
+// --- Setup steps -------------------------------------------------------------
+function renderSetup(def) {
+  const steps = def.setup || [];
+  const list = $('#setup-steps');
+  list.innerHTML = '';
+  if (steps.length === 0) {
+    $('#setup-section').style.display = 'none';
+    return;
+  }
+  $('#setup-section').style.display = '';
+
+  // Filter steps that are gated to a specific provider value.
+  const provider = CONFIG.channels[def.id]?.provider;
+  const visibleSteps = steps.filter(s => !s.providerWhen || s.providerWhen === provider);
+
+  for (const step of visibleSteps) {
+    const li = el('li', { class: 'setup-step' },
+      el('div', {},
+        el('h3', {}, step.title),
+        el('p', {}, step.detail),
+        renderStepAction(step),
+      ),
+    );
+    list.appendChild(li);
+  }
+}
+
+function renderStepAction(step) {
+  if (step.linkAction === 'open-voice-settings') {
+    return el('button', {
+      class: 'step-link',
+      type: 'button',
+      onclick: async () => { await cn.openVoiceSettings(); },
+    }, icon('external'), document.createTextNode(' '), document.createTextNode(step.linkLabel || 'Open settings'));
+  }
+  if (step.link) {
+    return el('a', { href: step.link, target: '_blank', rel: 'noopener noreferrer' },
+      icon('external'),
+      document.createTextNode(' '),
+      document.createTextNode(step.linkLabel || step.link),
+    );
+  }
+  return null;
+}
+
+// --- Events grid -------------------------------------------------------------
 function renderEvents(def) {
   const grid = $('#events-grid');
   grid.innerHTML = '';
@@ -215,7 +288,6 @@ function renderEvents(def) {
 
 // --- Save / Test --------------------------------------------------------------
 async function save() {
-  // Strip empty strings so the JSON file stays clean.
   const cleaned = JSON.parse(JSON.stringify(CONFIG));
   for (const cid of Object.keys(cleaned.channels || {})) {
     cleaned.channels[cid] = stripEmpty(cleaned.channels[cid]);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
 <title>Claude Notifications — Settings</title>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -10,7 +10,7 @@
 <div id="app">
   <aside class="sidebar">
     <header class="brand">
-      <div class="logo">🔔</div>
+      <img class="logo" src="assets/logo.svg" alt="Claude Notifications" width="40" height="40">
       <div class="title-block">
         <div class="title">Claude Notifications</div>
         <div class="subtitle" id="version">…</div>
@@ -18,39 +18,70 @@
     </header>
     <nav id="channel-list" class="channel-list" aria-label="Channels"></nav>
     <footer class="sidebar-footer">
-      <button id="open-config" class="btn btn-link" type="button">Open config file</button>
-      <button id="view-log" class="btn btn-link" type="button">View log</button>
+      <button id="open-config" class="btn btn-link" type="button">
+        <span class="btn-icon" data-icon="folder"></span>
+        <span>Open config file</span>
+      </button>
+      <button id="view-log" class="btn btn-link" type="button">
+        <span class="btn-icon" data-icon="fileLines"></span>
+        <span>View log</span>
+      </button>
     </footer>
   </aside>
 
   <main class="content">
     <header class="content-header">
-      <div>
+      <div class="header-text">
         <h1 id="channel-title">…</h1>
         <p id="channel-summary" class="muted">…</p>
       </div>
       <div class="actions">
-        <button id="test-btn" class="btn btn-secondary" type="button">Send test</button>
-        <button id="save-btn" class="btn btn-primary" type="button">Save changes</button>
+        <button id="test-btn" class="btn btn-secondary" type="button">
+          <span class="btn-icon" data-icon="play"></span>
+          <span>Send test</span>
+        </button>
+        <button id="save-btn" class="btn btn-primary" type="button">
+          <span class="btn-icon" data-icon="save"></span>
+          <span>Save changes</span>
+        </button>
       </div>
     </header>
 
-    <section class="form-section">
-      <form id="channel-form" autocomplete="off"></form>
-    </section>
+    <div class="scroll-area">
+      <section class="form-section panel">
+        <header class="panel-header">
+          <h2>Configuration</h2>
+          <p class="muted" id="panel-config-help">Credentials and channel-specific options.</p>
+        </header>
+        <form id="channel-form" autocomplete="off"></form>
+      </section>
 
-    <section class="events-section">
-      <h2>Events that trigger this channel</h2>
-      <p class="muted">Pick which Claude Code lifecycle events fan out to <span id="events-channel-name">this channel</span>. Don't enable <code>pre-tool</code> or <code>post-tool</code> unless you really want noise — they fire many times per turn.</p>
-      <div id="events-grid" class="events-grid"></div>
-    </section>
+      <section id="setup-section" class="setup-section panel">
+        <header class="panel-header">
+          <h2>
+            <span class="panel-icon" data-icon="info"></span>
+            How to set up <span id="setup-channel-name">this channel</span>
+          </h2>
+        </header>
+        <ol id="setup-steps" class="setup-steps"></ol>
+      </section>
 
-    <section class="status-section">
+      <section class="events-section panel">
+        <header class="panel-header">
+          <h2>Events that trigger this channel</h2>
+          <p class="muted">Pick which Claude Code lifecycle events fan out to <span id="events-channel-name">this channel</span>. Don't enable <code>pre-tool</code> or <code>post-tool</code> unless you really want noise — they fire many times per turn.</p>
+        </header>
+        <div id="events-grid" class="events-grid"></div>
+      </section>
+    </div>
+
+    <footer class="status-bar">
       <div id="status-msg" class="status-msg" role="status" aria-live="polite"></div>
-    </section>
+    </footer>
   </main>
 </div>
 
+<script src="icons.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

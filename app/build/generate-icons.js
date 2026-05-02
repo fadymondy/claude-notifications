@@ -1,12 +1,10 @@
 // Generates the static icon assets electron-builder needs at build time.
-//   build/icons/icon.png      — 512x512, used by Linux + as the master
-//   build/icons/icon.ico      — Windows multi-resolution
-//   build/icons/icon.icns     — macOS icon bundle
+//   build/icons/icon.png      — 512x512 colored branded icon (Linux + master)
+//   build/icons/icon.ico      — Windows
+//   build/icons/icon.icns     — macOS
 //
-// Reuses the procedural bell glyph from icon.js. The .ico and .icns generation
-// here produces a single-resolution wrapper sufficient for development; for
-// production-quality icons, generate from a designed SVG and replace these.
-//
+// The icon is procedurally rendered: warm-orange bell on transparent with
+// a red notification badge in the upper-right (matches the in-app SVG logo).
 // Run:  node build/generate-icons.js
 
 const fs = require('fs');
@@ -40,21 +38,107 @@ function chunk(type, data) {
   return Buffer.concat([len, typeBuf, data, crcBuf]);
 }
 
-// ---- bell shape evaluated at fractional coords for AA -----------------------
-function bellPixel(u, v) {
-  // Map u,v from [0,1] to a 22-unit canvas matching icon.js for visual parity.
-  const x = u * 21;
-  const y = v * 21;
-  const cx = 10.5;
-  if (y >= 4 && y <= 15) {
-    const top = 4, bot = 15;
-    const widthAtRow = 4 + ((y - top) * (10 - 4)) / (bot - top);
-    if (Math.abs(x - cx) <= widthAtRow / 2) return 1;
+// ---- Pixel coverage in [0,1] u/v space -------------------------------------
+// Each sampler returns coverage 0..1 for that primitive.
+
+const W_FRAC = 0.3;   // bell shoulder width (relative to canvas)
+const W_BOT = 0.66;   // bell base width
+const Y_TOP = 0.18;   // top of bell stem
+const Y_BODY_TOP = 0.22;
+const Y_BODY_BOT = 0.66;
+const Y_RIM = 0.72;
+const Y_CLAPPER = 0.85;
+const DOT_CX = 0.78, DOT_CY = 0.22, DOT_R = 0.13;
+
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function bellCoverage(u, v) {
+  // Stem
+  if (v >= Y_TOP && v <= Y_BODY_TOP + 0.01) {
+    const stemHalfW = 0.04;
+    if (Math.abs(u - 0.5) <= stemHalfW + 0.01) {
+      return Math.max(0, 1 - Math.abs(u - 0.5) / (stemHalfW + 0.01));
+    }
   }
-  if (Math.abs(y - 16) < 0.6 && Math.abs(x - cx) <= 7) return 1;
-  if (y >= 18 && y <= 19 && Math.abs(x - cx) <= 1) return 1;
-  if (y >= 2 && y <= 3 && Math.abs(x - cx) <= 1) return 1;
+  // Body — rounded trapezoid that flares from W_FRAC at top to W_BOT at bottom.
+  if (v >= Y_BODY_TOP && v <= Y_BODY_BOT) {
+    const t = (v - Y_BODY_TOP) / (Y_BODY_BOT - Y_BODY_TOP);
+    const widthAtRow = W_FRAC + t * (W_BOT - W_FRAC);
+    const dist = Math.abs(u - 0.5) - widthAtRow / 2;
+    // Soft anti-aliased edge
+    return 1 - smoothstep(-0.005, 0.01, dist);
+  }
+  // Rim — slightly wider band at the bottom of the body for a bell flare.
+  if (v >= Y_BODY_BOT && v <= Y_RIM) {
+    const halfW = 0.42;
+    const dist = Math.abs(u - 0.5) - halfW;
+    return 1 - smoothstep(-0.005, 0.01, dist);
+  }
+  // Clapper — small ellipse below the rim.
+  if (v >= 0.78 && v <= 0.92) {
+    const dx = u - 0.5;
+    const dy = v - Y_CLAPPER;
+    const d = Math.sqrt((dx / 0.06) ** 2 + (dy / 0.05) ** 2);
+    return 1 - smoothstep(0.95, 1.05, d);
+  }
   return 0;
+}
+
+function dotCoverage(u, v) {
+  const dx = u - DOT_CX, dy = v - DOT_CY;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  return 1 - smoothstep(DOT_R - 0.005, DOT_R + 0.01, r);
+}
+
+function dotInnerCoverage(u, v) {
+  const dx = u - DOT_CX, dy = v - DOT_CY;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  return 1 - smoothstep(DOT_R * 0.32, DOT_R * 0.42, r);
+}
+
+function blendPixel(u, v) {
+  // Returns [r, g, b, a] for one pixel.
+  const bell = bellCoverage(u, v);
+  const dot = dotCoverage(u, v);
+  const dotInner = dotInnerCoverage(u, v);
+
+  // Bell color: warm orange gradient (top lighter, bottom darker).
+  const bellTop = [255, 138, 61];
+  const bellBot = [217, 96, 39];
+  const bellMix = Math.max(0, Math.min(1, (v - Y_TOP) / (Y_CLAPPER - Y_TOP)));
+  const bellColor = bellTop.map((c, i) => Math.round(c * (1 - bellMix) + bellBot[i] * bellMix));
+
+  // Notification dot: red gradient + white center.
+  const dotOuter = [194, 41, 63];
+  const dotOuterTop = [255, 92, 99];
+  const dotMix = Math.max(0, Math.min(1, (v - (DOT_CY - DOT_R)) / (2 * DOT_R)));
+  const dotColor = dotOuterTop.map((c, i) => Math.round(c * (1 - dotMix) + dotOuter[i] * dotMix));
+  const whiteCenter = [255, 255, 255];
+
+  // Layer: bell, then dot on top, then white inner highlight.
+  let r = 0, g = 0, b = 0, a = 0;
+  if (bell > 0) { r = bellColor[0]; g = bellColor[1]; b = bellColor[2]; a = Math.round(bell * 255); }
+  if (dot > 0) {
+    const da = Math.round(dot * 255);
+    // Composite dot over bell (or transparent).
+    const fa = da / 255;
+    r = Math.round(dotColor[0] * fa + r * (1 - fa));
+    g = Math.round(dotColor[1] * fa + g * (1 - fa));
+    b = Math.round(dotColor[2] * fa + b * (1 - fa));
+    a = Math.max(a, da);
+  }
+  if (dotInner > 0) {
+    const ia = Math.round(dotInner * 220);
+    const fa = ia / 255;
+    r = Math.round(whiteCenter[0] * fa + r * (1 - fa));
+    g = Math.round(whiteCenter[1] * fa + g * (1 - fa));
+    b = Math.round(whiteCenter[2] * fa + b * (1 - fa));
+    a = Math.max(a, ia);
+  }
+  return [r, g, b, a];
 }
 
 function buildPng(size) {
@@ -68,64 +152,91 @@ function buildPng(size) {
 
   const raw = Buffer.alloc(H * (1 + W * 4));
   let o = 0;
-  // Supersampled AA — 3x3 per output pixel.
+  // Supersample 3x3 per output pixel for AA.
   const SS = 3;
   for (let y = 0; y < H; y++) {
     raw[o++] = 0;
     for (let x = 0; x < W; x++) {
-      let solid = 0;
+      let r = 0, g = 0, b = 0, a = 0;
       for (let sy = 0; sy < SS; sy++) {
         for (let sx = 0; sx < SS; sx++) {
           const u = (x + (sx + 0.5) / SS) / W;
           const v = (y + (sy + 0.5) / SS) / H;
-          if (bellPixel(u, v)) solid++;
+          const px = blendPixel(u, v);
+          r += px[0]; g += px[1]; b += px[2]; a += px[3];
         }
       }
-      const alpha = Math.round((solid / (SS * SS)) * 255);
-      raw[o++] = 0; raw[o++] = 0; raw[o++] = 0; raw[o++] = alpha;
+      const N = SS * SS;
+      raw[o++] = Math.round(r / N);
+      raw[o++] = Math.round(g / N);
+      raw[o++] = Math.round(b / N);
+      raw[o++] = Math.round(a / N);
     }
   }
   const idat = zlib.deflateSync(raw, { level: 9 });
   return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// ---- ICO (Windows) — wraps a single PNG entry --------------------------------
-function buildIco(pngBuffer, size) {
+// ---- ICO (Windows) — multi-resolution wrapper -------------------------------
+function buildIco(sizes) {
+  const entries = sizes.map(sz => buildPng(sz));
   const header = Buffer.alloc(6);
-  header.writeUInt16LE(0, 0);  // reserved
-  header.writeUInt16LE(1, 2);  // type = icon
-  header.writeUInt16LE(1, 4);  // count = 1
-  const dir = Buffer.alloc(16);
-  dir[0] = size >= 256 ? 0 : size;
-  dir[1] = size >= 256 ? 0 : size;
-  dir[2] = 0;
-  dir[3] = 0;
-  dir.writeUInt16LE(1, 4);    // color planes
-  dir.writeUInt16LE(32, 6);   // bits per pixel
-  dir.writeUInt32LE(pngBuffer.length, 8);
-  dir.writeUInt32LE(22, 12);  // offset = 6 + 16
-  return Buffer.concat([header, dir, pngBuffer]);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(entries.length, 4);
+
+  let offset = 6 + 16 * entries.length;
+  const dirEntries = entries.map((png, i) => {
+    const sz = sizes[i];
+    const dir = Buffer.alloc(16);
+    dir[0] = sz >= 256 ? 0 : sz;
+    dir[1] = sz >= 256 ? 0 : sz;
+    dir[2] = 0;
+    dir[3] = 0;
+    dir.writeUInt16LE(1, 4);
+    dir.writeUInt16LE(32, 6);
+    dir.writeUInt32LE(png.length, 8);
+    dir.writeUInt32LE(offset, 12);
+    offset += png.length;
+    return dir;
+  });
+  return Buffer.concat([header, ...dirEntries, ...entries]);
 }
 
-// ---- ICNS (macOS) — wraps a single PNG entry --------------------------------
-// We use the 'ic09'/'ic10' modern PNG-based types. electron-builder will accept
-// this single-size icon for development; for App Store you'd want a full set.
-function buildIcns(pngBuffer, size) {
-  // OSType for 512x512 = 'ic09', 1024x1024 = 'ic10'.
-  const osType = size >= 1024 ? 'ic10' : 'ic09';
-  const typeBuf = Buffer.from(osType, 'ascii');
-  const lenBuf = Buffer.alloc(4);
-  lenBuf.writeUInt32BE(8 + pngBuffer.length, 0);
-  const entry = Buffer.concat([typeBuf, lenBuf, pngBuffer]);
+// ---- ICNS (macOS) — multi-resolution PNG-based --------------------------
+function buildIcns(entries) {
+  // entries: [{ osType: 'ic09', png: Buffer }, ...]
+  const entryBufs = entries.map(({ osType, png }) => {
+    const typeBuf = Buffer.from(osType, 'ascii');
+    const lenBuf = Buffer.alloc(4);
+    lenBuf.writeUInt32BE(8 + png.length, 0);
+    return Buffer.concat([typeBuf, lenBuf, png]);
+  });
+  const totalLen = 8 + entryBufs.reduce((a, b) => a + b.length, 0);
   const header = Buffer.alloc(8);
   header.write('icns', 0, 4, 'ascii');
-  header.writeUInt32BE(8 + entry.length, 4);
-  return Buffer.concat([header, entry]);
+  header.writeUInt32BE(totalLen, 4);
+  return Buffer.concat([header, ...entryBufs]);
 }
 
 // ---- write all assets --------------------------------------------------------
+const png16 = buildPng(16);
+const png32 = buildPng(32);
+const png48 = buildPng(48);
+const png64 = buildPng(64);
+const png128 = buildPng(128);
+const png256 = buildPng(256);
 const png512 = buildPng(512);
+const png1024 = buildPng(1024);
+
 fs.writeFileSync(path.join(OUT, 'icon.png'), png512);
-fs.writeFileSync(path.join(OUT, 'icon.ico'), buildIco(buildPng(256), 256));
-fs.writeFileSync(path.join(OUT, 'icon.icns'), buildIcns(png512, 512));
+fs.writeFileSync(path.join(OUT, 'icon.ico'), buildIco([16, 32, 48, 64, 128, 256]));
+fs.writeFileSync(path.join(OUT, 'icon.icns'), buildIcns([
+  { osType: 'icp4', png: png16 },   // 16x16
+  { osType: 'icp5', png: png32 },   // 32x32
+  { osType: 'ic07', png: png128 },  // 128x128
+  { osType: 'ic08', png: png256 },  // 256x256
+  { osType: 'ic09', png: png512 },  // 512x512
+  { osType: 'ic10', png: png1024 }, // 1024x1024
+]));
 console.log('Wrote icons to', OUT);
