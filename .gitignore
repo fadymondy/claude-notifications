@@ -18,5 +18,7 @@ node_modules/
 app/node_modules/
 app/dist/
 app/renderer/dist/
-app/build/icons/
+app/build/icons/*
+!app/build/icons/.gitkeep
+!app/build/icons/*.svg
 app/_legacy/
