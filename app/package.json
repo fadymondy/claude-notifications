@@ -65,6 +65,7 @@
       "config.js",
       "channels.js",
       "icon.js",
+      "updater.js",
       "renderer/dist/**/*",
       "renderer/assets/logo.svg",
       "build/icons/**/*"
