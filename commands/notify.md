@@ -1,6 +1,6 @@
 ---
 description: Send a notification through configured Claude Code notification channels
-argument-hint: [--level info|warn|error|success] <title> | <body>
+argument-hint: "[--level info|warn|error|success] <title> | <body>"
 allowed-tools: Bash
 ---
 

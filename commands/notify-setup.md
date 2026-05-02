@@ -1,6 +1,6 @@
 ---
 description: Interactive setup — walks through enabling notification channels and writes ~/.claude-notifications/config.json
-argument-hint: [channel-name]
+argument-hint: "[channel-name]"
 allowed-tools: Bash, Read, Write, Edit
 ---
 

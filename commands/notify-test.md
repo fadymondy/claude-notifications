@@ -1,6 +1,6 @@
 ---
 description: Test all enabled notification channels by firing a manual event through each
-argument-hint: [channel-name]
+argument-hint: "[channel-name]"
 allowed-tools: Bash
 ---
 
