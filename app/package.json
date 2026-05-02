@@ -82,8 +82,6 @@
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist",
       "notarize": {
         "teamId": "JW9HJH86GC"
       },
@@ -99,8 +97,6 @@
       ],
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": false,
-      "entitlements": "entitlements.mas.plist",
-      "entitlementsInherit": "entitlements.mas.inherit.plist",
       "provisioningProfile": "embedded.provisionprofile",
       "extendInfo": {
         "LSUIElement": true,
