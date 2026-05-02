@@ -1,6 +1,9 @@
 # claude-notifications
 
-A Claude Code plugin that sends notifications anywhere — Slack, Discord, email, WhatsApp, desktop (with voice via `say`), web push, and generic webhooks — driven by Claude Code's hook events.
+A Claude Code plugin that sends notifications anywhere — Slack, Discord, email, WhatsApp, desktop (with voice via `say`), web push, and generic webhooks — driven by Claude Code's hook events. Ships with an optional Electron **tray app** for one-click channel toggling and visual configuration.
+
+[![test](https://github.com/fadymondy/claude-notifications/actions/workflows/test.yml/badge.svg)](https://github.com/fadymondy/claude-notifications/actions/workflows/test.yml)
+[![release](https://github.com/fadymondy/claude-notifications/actions/workflows/release.yml/badge.svg)](https://github.com/fadymondy/claude-notifications/actions/workflows/release.yml)
 
 When Claude finishes a task, gets stuck waiting for input, or runs a tool you care about, this plugin fans the event out to whichever channels you've enabled. You walk away from the terminal and still get pinged.
 
@@ -81,7 +84,7 @@ That's it. When Claude finishes (`stop`) or asks for input (`notification`), Sla
       "enabled": true,
       "voice": {
         "enabled": true,
-        "name": "Samantha",
+        "name": "",
         "rate": 180,
         "style": "title"
       },
@@ -94,7 +97,53 @@ That's it. When Claude finishes (`stop`) or asks for input (`notification`), Sla
 
 `style` picks what gets spoken: `title`, `body`, or `both`. Or set `text` to a custom template — `{title}`, `{body}`, `{project}`, `{event}` are substituted.
 
-List available voices on macOS: `say -v ?`
+**Natural human voices on macOS.** Leave `voice.name` blank and the plugin auto-picks the most natural-sounding voice available, in this order:
+
+1. Siri-quality voice matching your system locale (best — sounds like Siri)
+2. Premium / Enhanced voice in your locale
+3. Any Siri voice in the same language family
+4. Any Premium / Enhanced voice in the same language family
+5. Pre-installed defaults: `Daniel` (en_GB), `Samantha` (en_US), `Karen` (en_AU), `Moira` (en_IE)
+
+For Siri-quality output, download a Premium voice via **System Settings → Accessibility → Spoken Content → System Voice → Manage Voices** (look for "Ava (Premium)", "Zoe (Premium)", "Tom (Premium)", etc.). Once installed it's auto-detected — no config change needed.
+
+List available voices: `say -v '?'`
+
+## Tray app (optional, recommended)
+
+A tiny cross-platform Electron app that lives in your menubar / system tray. Toggle channels on/off without touching JSON, edit credentials in a real form, and fire test notifications per channel — all in one place. Reads and writes the same `~/.claude-notifications/config.json` the bash dispatcher uses, so the tray app and Claude Code stay in sync.
+
+**Features:**
+
+- Quick-toggle each channel from the tray menu
+- Per-channel settings UI with all fields, helper text, and conditional fields (e.g. Twilio vs CallMeBot)
+- "Send test" button per channel that hits the real dispatcher
+- Per-event routing matrix (which events fire which channels)
+- Tail the live notification log in-app
+- macOS: hidden dock icon (true menubar app), template tray icon that adapts to light/dark mode
+- Single-instance lock: launching it again just opens the settings window
+- Watches the config file — edits via `/notify-config` or text editor refresh the menu instantly
+
+**Install (download a prebuilt release):**
+
+| OS      | Download from [Releases](https://github.com/fadymondy/claude-notifications/releases) |
+|---------|--------------------------------------------------------------------------------------|
+| macOS   | `Claude-Notifications-<version>-mac.dmg` (universal: x64 + arm64)                    |
+| Windows | `Claude-Notifications-Setup-<version>.exe` (NSIS installer)                          |
+| Linux   | `Claude-Notifications-<version>.AppImage` or `.deb`                                  |
+
+**Build from source:**
+
+```bash
+cd app
+npm install
+npm start          # run in dev mode
+npm run dist:mac   # build .dmg + .zip
+npm run dist:win   # build .exe (run on Windows)
+npm run dist:linux # build .AppImage + .deb (run on Linux)
+```
+
+The tray app uses Electron's built-in cross-platform notification + system tray APIs, so the same UI works identically on macOS, Windows, and Linux. On macOS, voice still goes through `say`; on Windows it uses native toast; on Linux it uses `notify-send`.
 
 ## Slash commands
 
@@ -190,11 +239,35 @@ Common causes:
 
 ## Requirements
 
+**Plugin (bash dispatcher):**
 - `bash` (3.2+ — works with macOS default)
-- `jq` (everywhere — install via `brew install jq` / `apt install jq`)
+- `jq` (`brew install jq` / `apt install jq`)
 - `curl` (everywhere)
 - `osascript` + `say` for macOS desktop/voice
 - `notify-send` + `spd-say` or `espeak` for Linux desktop/voice
+- PowerShell for Windows desktop notifications
+
+**Tray app (optional):**
+- macOS 10.13+, Windows 10+, or Linux with X11/Wayland
+- Node 20 or 22 (only required to build from source — prebuilt releases need nothing)
+
+## Development
+
+```bash
+git clone https://github.com/fadymondy/claude-notifications
+cd claude-notifications
+
+# Bash dispatcher — test directly:
+CLAUDE_PLUGIN_ROOT="$PWD" CN_FORCE_CHANNELS=desktop \
+  bash scripts/notify.sh manual <<< '{"title":"hi","body":"test","level":"info"}'
+
+# Tray app — run in dev:
+cd app
+npm install
+npm start
+```
+
+CI runs on every push: shellcheck on every channel handler, JSON validation, plugin manifest validation, and the Electron app's smoke tests on Linux/macOS/Windows × Node 20/22. Tagged commits (`vX.Y.Z`) trigger a release build that produces installers for all three OSes and uploads them to GitHub Releases.
 
 ## License
 

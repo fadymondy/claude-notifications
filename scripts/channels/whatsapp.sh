@@ -38,7 +38,6 @@ case "$provider" in
     phone=$(cn_get '.channels.whatsapp.callmebot.phone' CN_CALLMEBOT_PHONE)
     apikey=$(cn_get '.channels.whatsapp.callmebot.apikey' CN_CALLMEBOT_APIKEY)
     [ -z "$phone" ] || [ -z "$apikey" ] && { cn_log "whatsapp/callmebot: missing phone or apikey"; exit 0; }
-    encoded=$(printf '%s' "$message" | jq -sRr @uri)
     curl -sS -m 8 -G "https://api.callmebot.com/whatsapp.php" \
       --data-urlencode "phone=$phone" \
       --data-urlencode "text=$message" \

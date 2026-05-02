@@ -1,0 +1,89 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    name: Shell scripts (shellcheck + bash syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck + jq
+        run: sudo apt-get update && sudo apt-get install -y shellcheck jq
+
+      - name: bash -n every script
+        run: |
+          set -e
+          find scripts -name '*.sh' -print0 | while IFS= read -r -d '' f; do
+            echo "syntax: $f"
+            bash -n "$f"
+          done
+
+      - name: shellcheck
+        run: |
+          shellcheck --severity=warning --shell=bash \
+            scripts/notify.sh \
+            scripts/lib/*.sh \
+            scripts/channels/*.sh
+
+      - name: Validate JSON files
+        run: |
+          set -e
+          for f in $(find . -name '*.json' -not -path './app/node_modules/*' -not -path './app/dist/*'); do
+            echo "json: $f"
+            jq empty "$f"
+          done
+
+      - name: Validate plugin manifest
+        run: |
+          jq -e '.name and .version and .description' .claude-plugin/plugin.json
+          jq -e '.plugins | length > 0' .claude-plugin/marketplace.json
+
+  app:
+    name: Electron app (lint + smoke tests + icon build)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install deps
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+        shell: bash
+
+      - name: Lint (node -c)
+        run: npm run lint
+
+      - name: Smoke tests
+        run: npm test
+
+      - name: Generate icons
+        run: npm run icons
+
+      - name: Verify icon outputs exist
+        shell: bash
+        run: |
+          test -f build/icons/icon.png
+          test -f build/icons/icon.ico
+          test -f build/icons/icon.icns

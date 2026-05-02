@@ -69,6 +69,7 @@ dispatch_channel() {
     return 0
   fi
   # Time-bound; never let a slow channel block Claude.
+  # shellcheck disable=SC2154  # cn_log_file is exported from lib/config.sh
   if command -v timeout >/dev/null 2>&1; then
     timeout 5 bash "$script" 2>>"$cn_log_file" || cn_log "channel '$ch' failed (rc=$?)"
   elif command -v gtimeout >/dev/null 2>&1; then

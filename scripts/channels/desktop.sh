@@ -59,6 +59,52 @@ case "$uname_s" in
       osascript -e "display notification \"${esc_body}\" with title \"${esc_title}\"" 2>/dev/null || true
     fi
     if [ "$voice_enabled" = "true" ] && [ -n "$spoken" ] && command -v say >/dev/null 2>&1; then
+      # Auto-pick the most natural-sounding voice when the user didn't name one.
+      # Order of preference:
+      #   1. Premium Siri voices (self-identify as "Hi, I'm Siri!")
+      #   2. Voices flagged as (Premium) or (Enhanced)
+      #   3. Hand-picked sensible defaults that ship pre-installed
+      if [ -z "$voice_name" ]; then
+        voice_list=$(say -v '?' 2>/dev/null)
+        # Detect the user's locale so we prefer voices in their language first.
+        sys_locale=$(defaults read -g AppleLocale 2>/dev/null | tr - _ || true)
+        [ -z "$sys_locale" ] && sys_locale="${LANG%.*}"
+        [ -z "$sys_locale" ] && sys_locale="en_US"
+
+        # Pass 1: Siri-quality voice in the user's exact locale (most natural).
+        voice_name=$(printf '%s\n' "$voice_list" \
+          | awk -F '[[:space:]]{2,}' -v loc="$sys_locale" '
+              /Hi, I.m Siri!/ && tolower($2) == tolower(loc) { print $1; exit }')
+        # Pass 2: Premium/Enhanced in exact locale.
+        if [ -z "$voice_name" ]; then
+          voice_name=$(printf '%s\n' "$voice_list" \
+            | awk -F '[[:space:]]{2,}' -v loc="$sys_locale" '
+                /\(Premium\)|\(Enhanced\)/ && tolower($2) == tolower(loc) { print $1; exit }')
+        fi
+        # Pass 3: any Siri voice in the same language family (e.g. en_*).
+        if [ -z "$voice_name" ]; then
+          lang="${sys_locale%%_*}"
+          voice_name=$(printf '%s\n' "$voice_list" \
+            | awk -F '[[:space:]]{2,}' -v lang="$lang" '
+                /Hi, I.m Siri!/ && tolower($2) ~ ("^" tolower(lang) "[_-]") { print $1; exit }')
+        fi
+        # Pass 4: any Premium/Enhanced in the same language family.
+        if [ -z "$voice_name" ]; then
+          lang="${sys_locale%%_*}"
+          voice_name=$(printf '%s\n' "$voice_list" \
+            | awk -F '[[:space:]]{2,}' -v lang="$lang" '
+                /\(Premium\)|\(Enhanced\)/ && tolower($2) ~ ("^" tolower(lang) "[_-]") { print $1; exit }')
+        fi
+        # Pass 5: hand-picked good defaults that ship on every macOS.
+        if [ -z "$voice_name" ]; then
+          for fallback in "Daniel" "Samantha" "Karen" "Moira" "Tom" "Allison"; do
+            if printf '%s' "$voice_list" | awk -F '[[:space:]]{2,}' '{print $1}' | grep -Fxq "$fallback"; then
+              voice_name="$fallback"; break
+            fi
+          done
+        fi
+        cn_log "desktop: auto-selected voice '$voice_name' for locale '$sys_locale'"
+      fi
       say_args=()
       [ -n "$voice_name" ] && say_args+=("-v" "$voice_name")
       [ -n "$voice_rate" ] && say_args+=("-r" "$voice_rate")

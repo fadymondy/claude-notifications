@@ -35,7 +35,6 @@ fi
 
 subject="[Claude] ${CN_TITLE}"
 date_hdr=$(date -u +"%a, %d %b %Y %H:%M:%S +0000")
-boundary="cn$(date +%s)$RANDOM"
 
 build_message() {
   local recip="$1"
