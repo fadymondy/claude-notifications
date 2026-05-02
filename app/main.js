@@ -252,11 +252,102 @@ function openSettings() {
 // --- IPC handlers -------------------------------------------------------------
 // Enumerate macOS `say` voices into structured records so the renderer can
 // build a sensible voice picker. Returns [] on non-macOS or when `say` fails.
+// Enumerate Windows TTS voices via PowerShell System.Speech. Returns the
+// same shape as listMacVoices() so the renderer can render them with the
+// same Combobox.
+function listWindowsVoices() {
+  if (process.platform !== 'win32') return [];
+  try {
+    const ps = `Add-Type -AssemblyName System.Speech;
+$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+$s.GetInstalledVoices() | ForEach-Object {
+  $i = $_.VoiceInfo;
+  [pscustomobject]@{ name = $i.Name; locale = $i.Culture.Name; gender = $i.Gender.ToString() }
+} | ConvertTo-Json -Compress`;
+    const r = spawnSync('powershell.exe', ['-NoProfile', '-Command', ps], { encoding: 'utf8', timeout: 6000 });
+    if (r.status !== 0 || !r.stdout) return [];
+    const arr = JSON.parse(r.stdout);
+    const list = Array.isArray(arr) ? arr : [arr];
+    return list.map(v => ({
+      name: v.name,
+      locale: (v.locale || '').replace('-', '_'),
+      isSiri: false,
+      isPremium: false,
+      isEnhanced: false,
+      gender: (v.gender || '').toLowerCase(),
+    }));
+  } catch (_) { return []; }
+}
+
+// Enumerate Linux voices best-effort via spd-say -L (Speech Dispatcher) or
+// espeak --voices. Returns a common shape; gender unknown.
+function listLinuxVoices() {
+  if (process.platform !== 'linux') return [];
+  try {
+    let r = spawnSync('spd-say', ['-L'], { encoding: 'utf8', timeout: 4000 });
+    if (r.status === 0 && r.stdout) {
+      const out = [];
+      for (const line of r.stdout.split('\n')) {
+        const m = line.trim().match(/^(\S+)\s+(\S+)\s+(\S+)/);
+        if (m) out.push({ name: m[1], locale: m[2], isSiri: false, isPremium: false, isEnhanced: false, gender: 'unspecified' });
+      }
+      if (out.length > 0) return out;
+    }
+    r = spawnSync('espeak', ['--voices'], { encoding: 'utf8', timeout: 4000 });
+    if (r.status === 0 && r.stdout) {
+      const out = [];
+      const lines = r.stdout.split('\n').slice(1); // skip header
+      for (const line of lines) {
+        const cols = line.trim().split(/\s+/);
+        if (cols.length < 4) continue;
+        out.push({
+          name: cols[3],
+          locale: cols[1] || '',
+          isSiri: false, isPremium: false, isEnhanced: false,
+          gender: cols[2]?.startsWith('M') ? 'male' : cols[2]?.startsWith('F') ? 'female' : 'unspecified',
+        });
+      }
+      return out;
+    }
+    return [];
+  } catch (_) { return []; }
+}
+
+// One-shot probe of NSSpeechSynthesizer to get a {name → gender} map.
+// `say -v ?` doesn't print gender, but NSSpeechSynthesizer.attributesForVoice
+// does — so we cross-reference by display name.
+function probeVoiceGenders() {
+  if (process.platform !== 'darwin') return {};
+  try {
+    const script = `
+      ObjC.import("AppKit");
+      const ids = $.NSSpeechSynthesizer.availableVoices;
+      const out = {};
+      for (let i = 0; i < ids.count; i++) {
+        const id = ids.objectAtIndex(i);
+        const a = $.NSSpeechSynthesizer.attributesForVoice(id);
+        const name = a.objectForKey("VoiceName");
+        const g = a.objectForKey("VoiceGender");
+        if (name && g) {
+          // Map "VoiceGenderFemale" → "female", etc.
+          const tag = g.js.replace(/^VoiceGender/, "").toLowerCase();
+          out[name.js] = tag;
+        }
+      }
+      JSON.stringify(out);
+    `;
+    const r = spawnSync('osascript', ['-l', 'JavaScript', '-e', script], { encoding: 'utf8', timeout: 4000 });
+    if (r.status !== 0 || !r.stdout) return {};
+    return JSON.parse(r.stdout.trim());
+  } catch (_) { return {}; }
+}
+
 function listMacVoices() {
   if (process.platform !== 'darwin') return [];
   try {
     const r = spawnSync('say', ['-v', '?'], { encoding: 'utf8', timeout: 4000 });
     if (r.status !== 0 || !r.stdout) return [];
+    const genders = probeVoiceGenders();
     const voices = [];
     for (const line of r.stdout.split('\n')) {
       // Locate the locale code (e.g. en_US, fr_FR) anywhere on the line.
@@ -270,7 +361,8 @@ function listMacVoices() {
       const isSiri = /Hi, I.m Siri!/.test(tail);
       const isPremium = /\(Premium\)/.test(name);
       const isEnhanced = /\(Enhanced\)/.test(name);
-      voices.push({ name, locale, isSiri, isPremium, isEnhanced });
+      const gender = genders[name] || 'unspecified'; // 'female' | 'male' | 'neuter' | 'unspecified'
+      voices.push({ name, locale, isSiri, isPremium, isEnhanced, gender });
     }
     // Best-first: Siri > Premium > Enhanced > basic, then alpha within group.
     voices.sort((a, b) => {
@@ -283,6 +375,83 @@ function listMacVoices() {
   } catch (_) { return []; }
 }
 
+// Resolve the user's current macOS System Voice (the one selected in
+// System Settings → Accessibility → Spoken Content) to a row from
+// listMacVoices(). Returns null on non-macOS, or when the pref is unset
+// and we can't make a confident match.
+//
+// macOS stores the pref like this:
+//   SelectedVoiceCreator = 1886745202;
+//   SelectedVoiceID = 220;
+//   SelectedVoiceName = "com.apple.speech.synthesis.voice.samantha";
+// The short tail after the last "." is what we match against the display
+// name returned by `say -v ?`.
+function getSystemDefaultVoice(voices) {
+  if (process.platform !== 'darwin') return null;
+  if (!voices || voices.length === 0) return null;
+
+  const score = v => (v.isSiri ? 0 : v.isPremium ? 1 : v.isEnhanced ? 2 : 3);
+  const matchByShortName = (short) => {
+    const cand = voices.filter(v => v.name.split(/\s|\(/)[0].toLowerCase() === short.toLowerCase());
+    cand.sort((a, b) => score(a) - score(b));
+    return cand[0] || null;
+  };
+
+  // 1) Explicit pref — what the user picked in System Settings → Accessibility
+  // → Spoken Content. macOS only sets this when the user actively chooses a
+  // voice; on a stock install the key is missing.
+  try {
+    const r = spawnSync('defaults', ['read', 'com.apple.speech.voice.prefs', 'SelectedVoiceName'], {
+      encoding: 'utf8', timeout: 2000,
+    });
+    if (r.status === 0 && r.stdout) {
+      const short = r.stdout.trim().replace(/^com\.apple\.speech\.synthesis\.voice\./i, '');
+      if (short) {
+        const hit = matchByShortName(short);
+        if (hit) return hit;
+      }
+    }
+  } catch (_) { /* fall through */ }
+
+  // 2) Authoritative fallback — ask AVSpeechSynthesisVoice for the default
+  // voice of the system's current language. This is what `say` itself uses
+  // when no -v is passed, and it correctly resolves regions (e.g. en_EG
+  // routes to en-US Samantha because there's no en_EG voice installed).
+  try {
+    const script = `
+      ObjC.import("AVFoundation");
+      const lang = $.AVSpeechSynthesisVoice.currentLanguageCode.js;
+      const def  = $.AVSpeechSynthesisVoice.voiceWithLanguage(lang);
+      JSON.stringify({ name: def.name.js, identifier: def.identifier.js, language: lang });
+    `;
+    const r = spawnSync('osascript', ['-l', 'JavaScript', '-e', script], { encoding: 'utf8', timeout: 4000 });
+    if (r.status === 0 && r.stdout) {
+      const info = JSON.parse(r.stdout.trim());
+      // Try matching by display name first, then by id tail.
+      const byName = matchByShortName(info.name);
+      if (byName) return byName;
+      const idTail = (info.identifier || '').split('.').pop();
+      if (idTail) {
+        const byId = matchByShortName(idTail);
+        if (byId) return byId;
+      }
+    }
+  } catch (_) { /* fall through */ }
+
+  // 3) Last-ditch: language-family match. Only hits when the JXA probe is
+  // blocked (e.g. sandboxed builds).
+  let appLang = 'en';
+  try {
+    const r = spawnSync('defaults', ['read', '-g', 'AppleLanguages'], { encoding: 'utf8', timeout: 2000 });
+    if (r.status === 0 && r.stdout) {
+      const m = r.stdout.match(/"([a-z]{2,3})[-_]/);
+      if (m) appLang = m[1];
+    }
+  } catch (_) { /* ignore */ }
+  const byLang = voices.filter(v => v.locale.startsWith(appLang + '_')).sort((a, b) => score(a) - score(b));
+  return byLang[0] || null;
+}
+
 function registerIpc() {
   ipcMain.handle('config:read', () => config.read());
   ipcMain.handle('config:write', (_e, cfg) => { config.write(cfg); refreshTray(); return { ok: true }; });
@@ -292,11 +461,31 @@ function registerIpc() {
   ipcMain.handle('test:channel', (_e, channelId, opts) => sendTest(channelId, opts || {}));
   ipcMain.handle('schema:channels', () => CHANNEL_DEFS);
   ipcMain.handle('schema:events', () => EVENT_DEFS);
-  ipcMain.handle('voices:list', () => listMacVoices());
+  ipcMain.handle('voices:list', () => {
+    if (process.platform === 'darwin') return listMacVoices();
+    if (process.platform === 'win32')  return listWindowsVoices();
+    if (process.platform === 'linux')  return listLinuxVoices();
+    return [];
+  });
+  ipcMain.handle('voices:system-default', () => {
+    const list = listMacVoices();
+    return getSystemDefaultVoice(list);
+  });
   ipcMain.handle('voices:open-settings', () => {
-    if (process.platform !== 'darwin') return { ok: false, error: 'macOS only' };
-    shell.openExternal('x-apple.systempreferences:com.apple.preference.universalaccess?Speech');
-    return { ok: true };
+    if (process.platform === 'darwin') {
+      shell.openExternal('x-apple.systempreferences:com.apple.preference.universalaccess?Speech');
+      return { ok: true };
+    }
+    if (process.platform === 'win32') {
+      shell.openExternal('ms-settings:speech');
+      return { ok: true };
+    }
+    if (process.platform === 'linux') {
+      // No standard deeplink — point at the Speech Dispatcher manual.
+      shell.openExternal('https://htmlpreview.github.io/?https://github.com/brailcom/speechd/blob/master/doc/speech-dispatcher.html');
+      return { ok: true, hint: 'Linux: edit ~/.config/speech-dispatcher/ or install voices via your distro\'s package manager.' };
+    }
+    return { ok: false, error: 'unsupported platform' };
   });
   ipcMain.handle('voices:preview', (_e, voiceName, text) => {
     if (process.platform !== 'darwin') return { ok: false, error: 'macOS only' };
@@ -304,6 +493,100 @@ function registerIpc() {
     const args = ['-v', voiceName, '--', text || `Hello, this is ${voiceName.split(' (')[0]}.`];
     spawn('say', args, { detached: true, stdio: 'ignore' }).unref();
     return { ok: true };
+  });
+
+  // Per-event audio uploads. Files live under
+  // ~/.claude-notifications/audio/<channelId>/<eventId>.<ext> so the bash
+  // dispatcher can locate them deterministically without parsing JSON paths.
+  const AUDIO_DIR = path.join(config.CONFIG_DIR, 'audio');
+  const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'aac', 'wav', 'aiff', 'ogg', 'flac'];
+
+  function audioDir(channelId) {
+    return path.join(AUDIO_DIR, channelId);
+  }
+  function findExistingAudio(channelId, eventId) {
+    const dir = audioDir(channelId);
+    if (!fs.existsSync(dir)) return null;
+    for (const ext of AUDIO_EXTENSIONS) {
+      const p = path.join(dir, `${eventId}.${ext}`);
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  ipcMain.handle('audio:choose-and-save', async (_e, channelId, eventId) => {
+    if (!channelId || !eventId) return { ok: false, error: 'missing channel or event id' };
+    const r = await dialog.showOpenDialog({
+      title: `Choose audio for ${eventId}`,
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: AUDIO_EXTENSIONS }],
+    });
+    if (r.canceled || !r.filePaths?.[0]) return { ok: false, canceled: true };
+    const src = r.filePaths[0];
+    const ext = (path.extname(src).slice(1) || 'mp3').toLowerCase();
+    if (!AUDIO_EXTENSIONS.includes(ext)) {
+      return { ok: false, error: `unsupported extension .${ext}` };
+    }
+    const dir = audioDir(channelId);
+    fs.mkdirSync(dir, { recursive: true });
+    // Wipe any existing entry for this event with a different extension —
+    // there's only one file per event.
+    for (const e of AUDIO_EXTENSIONS) {
+      const p = path.join(dir, `${eventId}.${e}`);
+      if (p !== path.join(dir, `${eventId}.${ext}`) && fs.existsSync(p)) {
+        try { fs.unlinkSync(p); } catch (_) {}
+      }
+    }
+    const dest = path.join(dir, `${eventId}.${ext}`);
+    fs.copyFileSync(src, dest);
+    return { ok: true, path: dest, name: path.basename(src) };
+  });
+
+  ipcMain.handle('audio:remove', (_e, channelId, eventId) => {
+    if (!channelId || !eventId) return { ok: false, error: 'missing id' };
+    const existing = findExistingAudio(channelId, eventId);
+    if (!existing) return { ok: true, removed: false };
+    try {
+      fs.unlinkSync(existing);
+      return { ok: true, removed: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('audio:list', (_e, channelId) => {
+    if (!channelId) return {};
+    const dir = audioDir(channelId);
+    if (!fs.existsSync(dir)) return {};
+    const out = {};
+    for (const file of fs.readdirSync(dir)) {
+      const m = file.match(/^(.+)\.([a-z0-9]+)$/i);
+      if (!m) continue;
+      const [, eventId, ext] = m;
+      if (!AUDIO_EXTENSIONS.includes(ext.toLowerCase())) continue;
+      out[eventId] = path.join(dir, file);
+    }
+    return out;
+  });
+
+  ipcMain.handle('audio:preview', (_e, filePath) => {
+    if (!filePath || !fs.existsSync(filePath)) return { ok: false, error: 'file not found' };
+    if (process.platform === 'darwin') {
+      spawn('afplay', [filePath], { detached: true, stdio: 'ignore' }).unref();
+      return { ok: true };
+    }
+    if (process.platform === 'linux') {
+      const player = ['paplay', 'aplay', 'mpg123', 'ffplay'].find(p => spawnSync('which', [p]).status === 0);
+      if (!player) return { ok: false, error: 'install paplay/aplay/mpg123/ffplay to preview' };
+      spawn(player, [filePath], { detached: true, stdio: 'ignore' }).unref();
+      return { ok: true };
+    }
+    if (process.platform === 'win32') {
+      const ps = `(New-Object Media.SoundPlayer '${filePath.replace(/'/g, "''")}').PlaySync()`;
+      spawn('powershell.exe', ['-NoProfile', '-Command', ps], { detached: true, stdio: 'ignore' }).unref();
+      return { ok: true };
+    }
+    return { ok: false, error: 'unsupported platform' };
   });
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),

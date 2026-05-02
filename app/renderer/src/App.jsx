@@ -4,7 +4,7 @@ import { Button } from './components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './components/ui/card';
 import { Field } from './components/Field';
 import { SetupSteps } from './components/SetupSteps';
-import { EventsGrid } from './components/EventsGrid';
+import { EventsList } from './components/EventsList';
 import { StatusBar } from './components/StatusBar';
 import { UpdateBanner } from './components/UpdateBanner';
 import { Play, Save } from 'lucide-react';
@@ -45,6 +45,7 @@ export default function App() {
   const [activeId, setActiveId] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [voices, setVoices] = useState([]);
+  const [systemVoice, setSystemVoice] = useState(null);
   const [status, setStatus] = useState({ message: '', kind: 'info' });
 
   // Bootstrap: pull schema, config, app info, voices from main.
@@ -58,12 +59,13 @@ export default function App() {
           window.cn.readConfig(),
         ]);
         setInfo(appInfo);
-        // Inject the special voice picker field on macOS only — channels.js
-        // ships voice.name as 'text', and we upgrade it here when the OS
-        // supports listing voices.
+        // Upgrade the desktop channel's voice.name field to the searchable
+        // Combobox on every OS — listVoices() returns OS-appropriate entries
+        // (NSSpeechSynthesizer on macOS, System.Speech on Windows, spd-say /
+        // espeak on Linux) and the picker degrades gracefully when the list
+        // is empty.
         const enriched = sChannels.map((c) => {
           if (c.id !== 'desktop') return c;
-          if (appInfo.platform !== 'darwin') return c;
           return {
             ...c,
             fields: c.fields.map((f) => f.key === 'voice.name' ? { ...f, type: 'voice' } : f),
@@ -74,10 +76,12 @@ export default function App() {
         setConfig(cfg.channels ? cfg : { channels: {} });
         setActiveId(enriched[0]?.id);
 
-        if (appInfo.platform === 'darwin') {
-          const list = await window.cn.listVoices();
-          setVoices(list || []);
-        }
+        const [list, sysVoice] = await Promise.all([
+          window.cn.listVoices(),
+          window.cn.systemDefaultVoice?.() ?? Promise.resolve(null),
+        ]);
+        setVoices(list || []);
+        setSystemVoice(sysVoice || null);
 
         if (!appInfo.pluginRoot) {
           setStatus({
@@ -228,6 +232,7 @@ export default function App() {
                     channelConfig={channelCfg}
                     onChange={handleFieldChange}
                     voiceOptions={voices}
+                    systemDefaultVoice={systemVoice}
                   />
                 ))}
               </div>
@@ -240,7 +245,7 @@ export default function App() {
             onOpenVoiceSettings={() => window.cn.openVoiceSettings()}
           />
 
-          <EventsGrid
+          <EventsList
             def={activeDef}
             events={events}
             channelConfig={channelCfg}

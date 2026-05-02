@@ -4,8 +4,6 @@
       "enabled": true,
       "voice": {
         "enabled": false,
-        "name": "Samantha",
-        "rate": 180,
         "style": "title"
       },
       "sound": "Funk",

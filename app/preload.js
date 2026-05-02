@@ -13,8 +13,17 @@ contextBridge.exposeInMainWorld('cn', {
   schemaChannels:()                  => ipcRenderer.invoke('schema:channels'),
   schemaEvents:  ()                  => ipcRenderer.invoke('schema:events'),
   listVoices:    ()                  => ipcRenderer.invoke('voices:list'),
+  systemDefaultVoice: ()             => ipcRenderer.invoke('voices:system-default'),
   openVoiceSettings: ()              => ipcRenderer.invoke('voices:open-settings'),
   previewVoice:  (name, text)        => ipcRenderer.invoke('voices:preview', name, text),
+
+  audio: {
+    chooseAndSave: (channelId, eventId) => ipcRenderer.invoke('audio:choose-and-save', channelId, eventId),
+    remove:        (channelId, eventId) => ipcRenderer.invoke('audio:remove', channelId, eventId),
+    list:          (channelId)          => ipcRenderer.invoke('audio:list', channelId),
+    preview:       (filePath)           => ipcRenderer.invoke('audio:preview', filePath),
+  },
+
   appInfo:       ()                  => ipcRenderer.invoke('app:info'),
 
   updater: {

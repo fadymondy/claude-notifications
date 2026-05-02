@@ -18,6 +18,7 @@
 
 const { app, dialog, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const log = require('electron-log');
 
 let autoUpdater = null;
@@ -45,11 +46,24 @@ function emit(state) {
   }
 }
 
+function hasUpdateManifest() {
+  // electron-builder writes `app-update.yml` next to the resources only when
+  // the build was made with a publish target (i.e. `electron-builder` without
+  // `--dir`). Local `npm run pack` builds skip it, in which case any check
+  // throws ENOENT. Detect that up front and treat it as unsupported.
+  try {
+    return fs.existsSync(path.join(process.resourcesPath || '', 'app-update.yml'));
+  } catch (_) {
+    return false;
+  }
+}
+
 function isPackagedAndSupported() {
   // Auto-update only works on a packaged build with a real publish target.
   // Disable in dev — checking would just spam GitHub and confuse the UI.
   if (!app.isPackaged) return false;
   if (!autoUpdater) return false;
+  if (!hasUpdateManifest()) return false;
   return true;
 }
 
@@ -72,7 +86,7 @@ function start({ autoDownload = false } = {}) {
   if (started) return;
   started = true;
   if (!isPackagedAndSupported()) {
-    emit({ phase: 'unsupported', reason: app.isPackaged ? 'electron-updater missing' : 'dev mode' });
+    emit({ phase: 'unsupported', reason: !app.isPackaged ? 'dev mode' : !autoUpdater ? 'electron-updater missing' : 'local build (no update manifest)' });
     return;
   }
   configure({ autoDownload });
@@ -83,7 +97,7 @@ function start({ autoDownload = false } = {}) {
 
 async function checkNow() {
   if (!isPackagedAndSupported()) {
-    emit({ phase: 'unsupported', reason: app.isPackaged ? 'electron-updater missing' : 'dev mode' });
+    emit({ phase: 'unsupported', reason: !app.isPackaged ? 'dev mode' : !autoUpdater ? 'electron-updater missing' : 'local build (no update manifest)' });
     return { ok: false, reason: 'unsupported' };
   }
   try {
