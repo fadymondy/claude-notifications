@@ -42,76 +42,74 @@ function chunk(type, data) {
   return Buffer.concat([len, typeBuf, data, crcBuf]);
 }
 
-function smoothstep(edge0, edge1, x) {
-  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
-
-// Boxicons bxs-bell silhouette, recreated procedurally so we don't need an SVG
-// rasterizer. The shape is a single solid bell glyph — no notification badge
-// (the badge is in the colored app/dock icon instead). Coordinates are in
-// [0,1] where (0,0) is top-left of the canvas. Tweaked so the glyph reads
-// well at 22px / 44px on a menubar.
+// Boxicons bxs-bell silhouette, composed from a UNION of clean geometric
+// primitives so the shape is recognizable at 22px on a menubar:
 //
-// Body is a rounded "U" with curved shoulders, a small stem on top, a wider
-// rim band at the bottom, and a small clapper hanging below.
-function bellCoverage(u, v) {
-  // Translate u into bell-local x: 0 = vertical centerline.
-  const x = u - 0.5;
+//     Stem (rounded rect)
+//          │
+//          ▼
+//     ┌────────┐         ◄── Bell cap (circle)
+//    /          \
+//   |   body    |        ◄── Body straight sides (rectangle)
+//   |           |
+//   ────────────────     ◄── Rim (rounded rect, wider than body)
+//          ●             ◄── Clapper (ellipse)
+//
+// All coordinates are in [0,1] u/v space. Antialiasing comes from 3×3
+// supersampling in buildPng() — each primitive returns a hard 0/1 inside-test
+// and the average of 9 samples per pixel gives clean edges.
 
-  // 1. Top stem (small rectangle joining the bell to the centerline).
-  if (v >= 0.10 && v <= 0.18) {
-    const halfW = 0.06;
-    const dist = Math.abs(x) - halfW;
-    return 1 - smoothstep(-0.005, 0.012, dist);
-  }
-
-  // 2. Bell body — flares from W_TOP at the shoulders to W_BOT at the rim.
-  // Use a slightly curved profile so the silhouette looks more like the
-  // Boxicons bell than a straight trapezoid.
-  if (v >= 0.18 && v <= 0.65) {
-    const t = (v - 0.18) / (0.65 - 0.18);     // 0..1 down the body
-    // Curve out gently at first, then flare more aggressively near the rim.
-    const widthAtRow = 0.30 + 0.32 * Math.pow(t, 0.85);
-    const dist = Math.abs(x) - widthAtRow / 2;
-    return 1 - smoothstep(-0.005, 0.012, dist);
-  }
-
-  // 3. Rim — wider band at the bottom of the body that gives the bell its flare.
-  if (v >= 0.65 && v <= 0.74) {
-    // Slightly pinched at top of rim, full width at bottom.
-    const t = (v - 0.65) / 0.09;
-    const halfW = 0.42 + 0.04 * t;
-    const dist = Math.abs(x) - halfW;
-    return 1 - smoothstep(-0.005, 0.012, dist);
-  }
-
-  // 4. Rim bottom edge curve — small radius rounding so the bottom of the
-  // rim isn't visually flat.
-  if (v >= 0.74 && v <= 0.78) {
-    const cy = 0.74;
-    const halfW = 0.46;
-    if (Math.abs(x) <= halfW - 0.02) {
-      const dy = v - cy;
-      return 1 - smoothstep(0.04 - 0.005, 0.04 + 0.012, dy);
-    }
-  }
-
-  // 5. Clapper — small ellipse hanging below the rim.
-  if (v >= 0.78 && v <= 0.92) {
-    const dx = x;
-    const dy = v - 0.85;
-    const d = Math.sqrt((dx / 0.07) ** 2 + (dy / 0.06) ** 2);
-    return 1 - smoothstep(0.95, 1.05, d);
-  }
-
-  return 0;
+// Signed-distance helpers for AA fallback (kept around for potential future
+// use, but the supersampler does the heavy lifting).
+function insideCircle(u, v, cx, cy, r) {
+  const dx = u - cx, dy = v - cy;
+  return Math.sqrt(dx * dx + dy * dy) <= r;
 }
 
-function blendPixel(u, v) {
-  const cov = bellCoverage(u, v);
-  if (cov <= 0) return [0, 0, 0, 0];
-  const a = Math.round(cov * 255);
+function insideRect(u, v, cx, cy, halfW, halfH) {
+  return Math.abs(u - cx) <= halfW && Math.abs(v - cy) <= halfH;
+}
+
+function insideRoundedRect(u, v, cx, cy, halfW, halfH, r) {
+  const dx = Math.abs(u - cx);
+  const dy = Math.abs(v - cy);
+  if (dx > halfW || dy > halfH) return false;
+  // Inside the inner rectangle (away from corners) → trivially inside.
+  if (dx <= halfW - r || dy <= halfH - r) return true;
+  // Near a corner → inside only if within radius of the corner center.
+  const ccx = halfW - r;
+  const ccy = halfH - r;
+  const ex = dx - ccx;
+  const ey = dy - ccy;
+  return ex * ex + ey * ey <= r * r;
+}
+
+function insideEllipse(u, v, cx, cy, rx, ry) {
+  const dx = (u - cx) / rx;
+  const dy = (v - cy) / ry;
+  return dx * dx + dy * dy <= 1;
+}
+
+// Bell-shape parameters tuned for crisp rendering at 22px / 44px.
+const STEM   = { cx: 0.50, cy: 0.135, hw: 0.055, hh: 0.045, r: 0.020 };
+const CAP    = { cx: 0.50, cy: 0.34,  r:  0.21 };
+const BODY   = { cx: 0.50, cy: 0.48,  hw: 0.21, hh: 0.14 };
+const RIM    = { cx: 0.50, cy: 0.685, hw: 0.34, hh: 0.06, r: 0.030 };
+const CLAP   = { cx: 0.50, cy: 0.85,  rx: 0.075, ry: 0.06 };
+
+function pixelInside(u, v) {
+  // Union (any primitive) gives the bell silhouette.
+  if (insideRoundedRect(u, v, STEM.cx, STEM.cy, STEM.hw, STEM.hh, STEM.r)) return true;
+  if (insideCircle(u, v, CAP.cx, CAP.cy, CAP.r)) return true;
+  if (insideRect(u, v, BODY.cx, BODY.cy, BODY.hw, BODY.hh)) return true;
+  if (insideRoundedRect(u, v, RIM.cx, RIM.cy, RIM.hw, RIM.hh, RIM.r)) return true;
+  if (insideEllipse(u, v, CLAP.cx, CLAP.cy, CLAP.rx, CLAP.ry)) return true;
+  return false;
+}
+
+function blendPixel(u, v, sampledCoverage) {
+  if (sampledCoverage <= 0) return [0, 0, 0, 0];
+  const a = Math.round(sampledCoverage * 255);
   // Pure black RGB; alpha carries the antialiased coverage. macOS template
   // mode reads only the alpha channel and recolors the icon for the menubar.
   return [0, 0, 0, a];
@@ -126,24 +124,25 @@ function buildPng(size) {
 
   const raw = Buffer.alloc(size * (1 + size * 4));
   let o = 0;
-  const SS = 3;
+  // Heavier supersampling at the very small tray sizes — 22×22 is unforgiving.
+  const SS = size <= 32 ? 5 : 3;
   for (let y = 0; y < size; y++) {
     raw[o++] = 0;
     for (let x = 0; x < size; x++) {
-      let r = 0, g = 0, b = 0, a = 0;
+      let inside = 0;
       for (let sy = 0; sy < SS; sy++) {
         for (let sx = 0; sx < SS; sx++) {
           const u = (x + (sx + 0.5) / SS) / size;
           const v = (y + (sy + 0.5) / SS) / size;
-          const px = blendPixel(u, v);
-          r += px[0]; g += px[1]; b += px[2]; a += px[3];
+          if (pixelInside(u, v)) inside++;
         }
       }
-      const N = SS * SS;
-      raw[o++] = Math.round(r / N);
-      raw[o++] = Math.round(g / N);
-      raw[o++] = Math.round(b / N);
-      raw[o++] = Math.round(a / N);
+      const cov = inside / (SS * SS);
+      const px = blendPixel(0, 0, cov);
+      raw[o++] = px[0];
+      raw[o++] = px[1];
+      raw[o++] = px[2];
+      raw[o++] = px[3];
     }
   }
   const idat = zlib.deflateSync(raw, { level: 9 });
