@@ -76,8 +76,8 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] },
-        { "target": "zip", "arch": ["x64", "arm64"] }
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
       ],
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": true,
@@ -85,6 +85,7 @@
       "notarize": {
         "teamId": "JW9HJH86GC"
       },
+      "minimumSystemVersion": "11.0",
       "extendInfo": {
         "LSUIElement": true,
         "ITSAppUsesNonExemptEncryption": false
@@ -93,7 +94,7 @@
     "mas": {
       "category": "public.app-category.developer-tools",
       "target": [
-        { "target": "mas", "arch": ["x64", "arm64"] }
+        { "target": "mas", "arch": ["arm64"] }
       ],
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": false,
