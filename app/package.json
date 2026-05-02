@@ -82,9 +82,8 @@
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
       "extendInfo": {
         "LSUIElement": true,
         "ITSAppUsesNonExemptEncryption": false
@@ -97,9 +96,9 @@
       ],
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": false,
-      "entitlements": "build/entitlements.mas.plist",
-      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
-      "provisioningProfile": "build/embedded.provisionprofile",
+      "entitlements": "entitlements.mas.plist",
+      "entitlementsInherit": "entitlements.mas.inherit.plist",
+      "provisioningProfile": "embedded.provisionprofile",
       "extendInfo": {
         "LSUIElement": true,
         "ITSAppUsesNonExemptEncryption": false

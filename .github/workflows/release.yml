@@ -64,40 +64,55 @@ jobs:
       - name: Smoke tests
         run: npm test
 
-      - name: Decode Apple signing certificate (macOS)
-        if: matrix.os == 'macos-latest' && env.MAC_CERTS != ''
-        env:
-          MAC_CERTS: ${{ secrets.MAC_CERTS }}
+      - name: Prepare signing credentials
+        id: signing
         shell: bash
+        env:
+          MAC_CERTS:        ${{ secrets.MAC_CERTS }}
+          MAC_CERTS_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          WIN_CERTS:        ${{ secrets.WIN_CERTS }}
+          WIN_CERTS_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
+          APPLE_ID:         ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID:    ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          echo "$MAC_CERTS" | base64 --decode > /tmp/cert.p12
-          ls -la /tmp/cert.p12
+          # Decode certs and persist any signing-related env vars into the
+          # job's $GITHUB_ENV so the next step picks them up. We *only* set
+          # the env vars when their secrets exist — empty values are toxic
+          # to electron-builder (it tries to stat "" and crashes).
+          if [ -n "$MAC_CERTS" ] && [ "${{ matrix.os }}" = "macos-latest" ]; then
+            echo "$MAC_CERTS" | base64 --decode > /tmp/cert.p12
+            echo "CSC_LINK=/tmp/cert.p12" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$MAC_CERTS_PASSWORD" >> "$GITHUB_ENV"
+            echo "macOS signing: enabled"
+          else
+            echo "macOS signing: disabled (MAC_CERTS not set)"
+          fi
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ] && [ "${{ matrix.os }}" = "macos-latest" ]; then
+            echo "APPLE_ID=$APPLE_ID" >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
+            echo "macOS notarization: enabled"
+          else
+            echo "macOS notarization: disabled (Apple ID/team/password missing)"
+          fi
+          if [ -n "$WIN_CERTS" ] && [ "${{ matrix.os }}" = "windows-latest" ]; then
+            echo "WIN_CSC_LINK=$WIN_CERTS" >> "$GITHUB_ENV"
+            echo "WIN_CSC_KEY_PASSWORD=$WIN_CERTS_PASSWORD" >> "$GITHUB_ENV"
+            echo "Windows signing: enabled"
+          else
+            echo "Windows signing: disabled"
+          fi
 
       - name: Build distributables
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Apple Developer ID code signing — secrets are optional. When
-          # absent, electron-builder skips signing and produces an unsigned
-          # artifact (still installable, but Gatekeeper will warn).
-          CSC_LINK: ${{ secrets.MAC_CERTS && '/tmp/cert.p12' || '' }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
-          # Notarization (Apple-notarized DMG path).
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Disable identity auto-discovery so missing certs don't half-sign.
+          # When no signing identity is present we have to disable
+          # auto-discovery so electron-builder doesn't pick up the runner's
+          # default keychain entries and try to sign with them.
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTS != '' }}
-          # Windows code signing (optional — same pattern).
-          WIN_CSC_LINK: ${{ secrets.WIN_CERTS }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
-        run: |
-          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
-            echo "Notarization credentials present — enabling."
-            # Toggle the notarize flag on via env injection.
-            export ELECTRON_BUILDER_EXTRA_ARGS=""
-          fi
-          npm run ${{ matrix.target }} -- --publish never
+        run: npm run ${{ matrix.target }} -- --publish never
 
       - name: List build outputs
         shell: bash
