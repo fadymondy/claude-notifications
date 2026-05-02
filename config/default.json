@@ -1,0 +1,21 @@
+{
+  "channels": {
+    "desktop": {
+      "enabled": true,
+      "voice": {
+        "enabled": false,
+        "name": "Samantha",
+        "rate": 180,
+        "style": "title"
+      },
+      "sound": "Funk",
+      "events": ["notification", "stop", "subagent-stop"]
+    },
+    "slack": { "enabled": false },
+    "discord": { "enabled": false },
+    "email": { "enabled": false },
+    "whatsapp": { "enabled": false },
+    "webpush": { "enabled": false },
+    "webhook": { "enabled": false }
+  }
+}

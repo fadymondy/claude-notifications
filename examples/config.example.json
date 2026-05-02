@@ -1,0 +1,93 @@
+{
+  "channels": {
+    "desktop": {
+      "enabled": true,
+      "voice": {
+        "enabled": true,
+        "name": "Samantha",
+        "rate": 180,
+        "style": "title"
+      },
+      "sound": "Funk",
+      "events": ["notification", "stop", "subagent-stop"]
+    },
+
+    "slack": {
+      "enabled": true,
+      "webhook_url": "https://hooks.slack.com/services/T000/B000/XXXXXXXX",
+      "channel": "#claude",
+      "username": "Claude Code",
+      "events": ["notification", "stop", "subagent-stop"]
+    },
+
+    "discord": {
+      "enabled": true,
+      "webhook_url": "https://discord.com/api/webhooks/000/XXXXXXXX",
+      "username": "Claude Code",
+      "events": ["notification", "stop"]
+    },
+
+    "email": {
+      "enabled": false,
+      "transport": "smtp",
+      "smtp_url": "smtps://smtp.gmail.com:465",
+      "smtp_user": "you@gmail.com",
+      "smtp_password": "app-password",
+      "from": "Claude Code <you@gmail.com>",
+      "to": ["you@gmail.com"],
+      "events": ["stop"]
+    },
+
+    "whatsapp": {
+      "enabled": false,
+      "provider": "callmebot",
+      "callmebot": {
+        "phone": "+201XXXXXXXXX",
+        "apikey": "1234567"
+      },
+      "twilio": {
+        "account_sid": "ACxxxx",
+        "auth_token": "xxxx",
+        "from": "whatsapp:+14155238886",
+        "to": ["whatsapp:+201XXXXXXXXX"]
+      },
+      "events": ["notification", "stop"]
+    },
+
+    "webpush": {
+      "enabled": false,
+      "provider": "ntfy",
+      "ntfy": {
+        "server": "https://ntfy.sh",
+        "topic": "claude-fady-7a2d9c8f",
+        "priority": 4
+      },
+      "pushover": {
+        "user_key": "u...",
+        "app_token": "a..."
+      },
+      "events": ["notification", "stop"]
+    },
+
+    "webhook": {
+      "enabled": false,
+      "urls": ["https://api.example.com/claude/notify"],
+      "method": "POST",
+      "headers": { "X-Source": "claude-code" },
+      "auth_header": "Bearer xxxxx",
+      "secret": "shared-hmac-secret",
+      "events": ["*"]
+    }
+  },
+
+  "events": {
+    "notification": ["desktop", "slack", "discord"],
+    "stop":         ["desktop", "slack"],
+    "subagent-stop":["desktop"],
+    "session-start":[],
+    "session-end":  [],
+    "user-prompt":  [],
+    "pre-tool":     [],
+    "post-tool":    []
+  }
+}

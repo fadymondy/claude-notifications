@@ -1,0 +1,17 @@
+# Local user notification config — never commit
+.claude-notifications.json
+.claude-notifications/
+**/notify.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (in case skills add node tooling later)
+node_modules/

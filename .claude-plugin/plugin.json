@@ -1,0 +1,26 @@
+{
+  "name": "claude-notifications",
+  "version": "0.1.0",
+  "description": "Multi-channel notification system for Claude Code — email, Slack, Discord, WhatsApp, desktop (with voice), web push, and generic webhooks. Routes Claude Code hook events anywhere.",
+  "author": {
+    "name": "Fady Mondy",
+    "email": "engfadymondy@gmail.com",
+    "url": "https://github.com/fadymondy"
+  },
+  "homepage": "https://github.com/fadymondy/claude-notifications",
+  "repository": "https://github.com/fadymondy/claude-notifications",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "notifications",
+    "hooks",
+    "slack",
+    "discord",
+    "whatsapp",
+    "email",
+    "webhook",
+    "push",
+    "desktop",
+    "voice"
+  ]
+}
