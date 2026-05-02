@@ -1,0 +1,44 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-notifications",
+  "description": "Multi-channel notification plugin for Claude Code — Slack, Discord, email, WhatsApp, desktop with voice, web push, and generic webhooks.",
+  "owner": {
+    "name": "Fady Mondy",
+    "email": "engfadymondy@gmail.com",
+    "url": "https://github.com/fadymondy"
+  },
+  "metadata": {
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "claude-notifications",
+      "source": "./",
+      "description": "Send Claude Code hook events to Slack, Discord, email, WhatsApp, desktop (with voice via `say`), web push (ntfy / Pushover), and generic webhooks. Per-event routing, custom channel handlers, agent + skills + slash commands.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Fady Mondy",
+        "email": "engfadymondy@gmail.com",
+        "url": "https://github.com/fadymondy"
+      },
+      "homepage": "https://github.com/fadymondy/claude-notifications",
+      "repository": "https://github.com/fadymondy/claude-notifications",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": [
+        "claude-code",
+        "notifications",
+        "hooks",
+        "slack",
+        "discord",
+        "whatsapp",
+        "email",
+        "webhook",
+        "push",
+        "desktop",
+        "voice"
+      ],
+      "tags": ["notifications", "hooks", "slack", "discord", "voice"]
+    }
+  ]
+}
