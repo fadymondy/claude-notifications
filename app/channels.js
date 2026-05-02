@@ -10,7 +10,7 @@ const channels = [
       { key: 'enabled', label: 'Enabled', type: 'toggle', default: true },
       { key: 'sound', label: 'Sound name (macOS)', type: 'text', placeholder: 'Funk' },
       { key: 'voice.enabled', label: 'Speak the notification', type: 'toggle' },
-      { key: 'voice.name', label: 'Voice name', type: 'text', placeholder: 'Samantha', help: 'Run `say -v ?` on macOS to list voices.' },
+      { key: 'voice.name', label: 'Voice name (override)', type: 'text', placeholder: '(blank = your macOS System Voice)', help: 'Leave blank to use the voice you picked in System Settings → Accessibility → Spoken Content → System Voice. Otherwise enter an exact name from `say -v ?`.' },
       { key: 'voice.rate', label: 'Speech rate (wpm)', type: 'number', placeholder: '180' },
       { key: 'voice.style', label: 'What to speak', type: 'select', options: ['title', 'body', 'both'], default: 'title' },
       { key: 'voice.text', label: 'Custom template (optional)', type: 'text', placeholder: '{title}. {body}', help: '{title} {body} {project} {event} are substituted.' },

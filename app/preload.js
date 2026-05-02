@@ -4,13 +4,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('cn', {
-  readConfig:    ()           => ipcRenderer.invoke('config:read'),
-  writeConfig:   (cfg)        => ipcRenderer.invoke('config:write', cfg),
-  mergeConfig:   (partial)    => ipcRenderer.invoke('config:merge', partial),
-  revealConfig:  ()           => ipcRenderer.invoke('config:reveal'),
-  tailLog:       (lines)      => ipcRenderer.invoke('log:tail', lines),
-  testChannel:   (id, opts)   => ipcRenderer.invoke('test:channel', id, opts),
-  schemaChannels:()           => ipcRenderer.invoke('schema:channels'),
-  schemaEvents:  ()           => ipcRenderer.invoke('schema:events'),
-  appInfo:       ()           => ipcRenderer.invoke('app:info'),
+  readConfig:    ()                  => ipcRenderer.invoke('config:read'),
+  writeConfig:   (cfg)               => ipcRenderer.invoke('config:write', cfg),
+  mergeConfig:   (partial)           => ipcRenderer.invoke('config:merge', partial),
+  revealConfig:  ()                  => ipcRenderer.invoke('config:reveal'),
+  tailLog:       (lines)             => ipcRenderer.invoke('log:tail', lines),
+  testChannel:   (id, opts)          => ipcRenderer.invoke('test:channel', id, opts),
+  schemaChannels:()                  => ipcRenderer.invoke('schema:channels'),
+  schemaEvents:  ()                  => ipcRenderer.invoke('schema:events'),
+  listVoices:    ()                  => ipcRenderer.invoke('voices:list'),
+  openVoiceSettings: ()              => ipcRenderer.invoke('voices:open-settings'),
+  previewVoice:  (name, text)        => ipcRenderer.invoke('voices:preview', name, text),
+  appInfo:       ()                  => ipcRenderer.invoke('app:info'),
 });

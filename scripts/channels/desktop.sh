@@ -59,64 +59,13 @@ case "$uname_s" in
       osascript -e "display notification \"${esc_body}\" with title \"${esc_title}\"" 2>/dev/null || true
     fi
     if [ "$voice_enabled" = "true" ] && [ -n "$spoken" ] && command -v say >/dev/null 2>&1; then
-      # Auto-pick the most natural-sounding voice when the user didn't name one.
-      # Order of preference:
-      #   1. Premium Siri voices (self-identify as "Hi, I'm Siri!")
-      #   2. Voices flagged as (Premium) or (Enhanced)
-      #   3. Hand-picked sensible defaults that ship pre-installed
-      if [ -z "$voice_name" ]; then
-        voice_list=$(say -v '?' 2>/dev/null)
-        # Detect the user's locale so we prefer voices in their language first.
-        sys_locale=$(defaults read -g AppleLocale 2>/dev/null | tr - _ || true)
-        [ -z "$sys_locale" ] && sys_locale="${LANG%.*}"
-        [ -z "$sys_locale" ] && sys_locale="en_US"
-        lang="${sys_locale%%_*}"
-
-        # `say -v '?'` is column-aligned: long names eat the padding so awk-by-
-        # whitespace breaks. Parse with a regex that locates the locale code
-        # (e.g. en_US) anywhere on the line, then everything before it is the
-        # voice name. Siri voices ALWAYS end the line with "Hi, I'm Siri!" —
-        # those are the most natural human-quality voices on macOS, so we want
-        # them first regardless of accent.
-        pick_voice() {
-          # $1 = filter regex applied to the line; $2 = locale-match awk regex
-          awk -v filter="$1" -v locre="$2" '
-            $0 ~ filter {
-              if (match($0, /[a-z][a-z][a-z]?_[A-Z][A-Z][A-Z]?/)) {
-                loc = substr($0, RSTART, RLENGTH)
-                if (tolower(loc) ~ locre) {
-                  name = substr($0, 1, RSTART - 1)
-                  sub(/[[:space:]]+$/, "", name)
-                  print name
-                  exit
-                }
-              }
-            }
-          ' <<< "$voice_list"
-        }
-
-        # Pass 1: Siri voice in the exact user locale (best — Siri-quality + native accent).
-        voice_name=$(pick_voice "Hi, I.m Siri!" "^$(printf '%s' "$sys_locale" | tr '[:upper:]' '[:lower:]')$")
-        # Pass 2: Premium/Enhanced in the exact locale.
-        [ -z "$voice_name" ] && voice_name=$(pick_voice "\\(Premium\\)|\\(Enhanced\\)" "^$(printf '%s' "$sys_locale" | tr '[:upper:]' '[:lower:]')$")
-        # Pass 3: ANY Siri voice in the same language family — Siri quality
-        # trumps accent match, since the alternative is robotic Daniel/Samantha.
-        [ -z "$voice_name" ] && voice_name=$(pick_voice "Hi, I.m Siri!" "^$(printf '%s' "$lang" | tr '[:upper:]' '[:lower:]')[_-]")
-        # Pass 4: any Premium/Enhanced in the language family.
-        [ -z "$voice_name" ] && voice_name=$(pick_voice "\\(Premium\\)|\\(Enhanced\\)" "^$(printf '%s' "$lang" | tr '[:upper:]' '[:lower:]')[_-]")
-        # Pass 5: ANY Siri voice at all (some users only have Siri voices in
-        # one or two languages — better foreign-accent Siri than no Siri).
-        [ -z "$voice_name" ] && voice_name=$(pick_voice "Hi, I.m Siri!" ".+")
-        # Pass 6: hand-picked good defaults that ship on every macOS.
-        if [ -z "$voice_name" ]; then
-          for fallback in "Daniel" "Samantha" "Karen" "Moira" "Tom" "Allison"; do
-            if printf '%s' "$voice_list" | grep -qE "^${fallback}[[:space:]]"; then
-              voice_name="$fallback"; break
-            fi
-          done
-        fi
-        cn_log "desktop: auto-selected voice '$voice_name' for locale '$sys_locale'"
-      fi
+      # When voice_name is unset we INTENTIONALLY do NOT pass -v, so `say` uses
+      # the system voice the user has chosen in System Settings → Accessibility
+      # → Spoken Content → System Voice. That's the most natural-sounding voice
+      # available — typically a Siri voice (Voice 1-5 / Ava / Tom / etc.) the
+      # user picked themselves. Heuristic auto-detection is brittle and can't
+      # know the user's preferred accent; respecting their explicit OS choice
+      # is the right behavior.
       say_args=()
       [ -n "$voice_name" ] && say_args+=("-v" "$voice_name")
       [ -n "$voice_rate" ] && say_args+=("-r" "$voice_rate")

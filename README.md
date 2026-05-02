@@ -97,17 +97,11 @@ That's it. When Claude finishes (`stop`) or asks for input (`notification`), Sla
 
 `style` picks what gets spoken: `title`, `body`, or `both`. Or set `text` to a custom template — `{title}`, `{body}`, `{project}`, `{event}` are substituted.
 
-**Natural human voices on macOS.** Leave `voice.name` blank and the plugin auto-picks the most natural-sounding voice available, in this order:
+**Natural human voices on macOS.** Leave `voice.name` blank and the plugin uses your **System Voice** — whatever you've picked in **System Settings → Accessibility → Spoken Content → System Voice**. Pick a Siri voice there (Voice 1-5, named Ava / Tom / Zoe / etc. depending on macOS version) and notifications will sound like Siri. The plugin doesn't try to second-guess your choice.
 
-1. Siri-quality voice matching your system locale (best — sounds like Siri)
-2. Premium / Enhanced voice in your locale
-3. Any Siri voice in the same language family
-4. Any Premium / Enhanced voice in the same language family
-5. Pre-installed defaults: `Daniel` (en_GB), `Samantha` (en_US), `Karen` (en_AU), `Moira` (en_IE)
+To download a Siri voice: System Settings → Accessibility → Spoken Content → **System Voice** → click the dropdown → **Manage Voices…** → pick a variation (American/British/Australian/etc.) → tap a voice's cloud icon to download → click Done.
 
-For Siri-quality output, download a Premium voice via **System Settings → Accessibility → Spoken Content → System Voice → Manage Voices** (look for "Ava (Premium)", "Zoe (Premium)", "Tom (Premium)", etc.). Once installed it's auto-detected — no config change needed.
-
-List available voices: `say -v '?'`
+To override the system voice for *just* Claude notifications, set `voice.name` to an exact entry from `say -v '?'`.
 
 ## Tray app (optional, recommended)
 

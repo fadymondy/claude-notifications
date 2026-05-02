@@ -199,6 +199,39 @@ function openSettings() {
 }
 
 // --- IPC handlers -------------------------------------------------------------
+// Enumerate macOS `say` voices into structured records so the renderer can
+// build a sensible voice picker. Returns [] on non-macOS or when `say` fails.
+function listMacVoices() {
+  if (process.platform !== 'darwin') return [];
+  try {
+    const r = spawnSync('say', ['-v', '?'], { encoding: 'utf8', timeout: 4000 });
+    if (r.status !== 0 || !r.stdout) return [];
+    const voices = [];
+    for (const line of r.stdout.split('\n')) {
+      // Locate the locale code (e.g. en_US, fr_FR) anywhere on the line.
+      // Same parser the bash desktop handler uses, kept in sync intentionally.
+      const m = line.match(/[a-z]{2,3}_[A-Z]{2,3}/);
+      if (!m) continue;
+      const locale = m[0];
+      const name = line.slice(0, m.index).trimEnd();
+      if (!name) continue;
+      const tail = line.slice(m.index + locale.length).trim();
+      const isSiri = /Hi, I.m Siri!/.test(tail);
+      const isPremium = /\(Premium\)/.test(name);
+      const isEnhanced = /\(Enhanced\)/.test(name);
+      voices.push({ name, locale, isSiri, isPremium, isEnhanced });
+    }
+    // Best-first: Siri > Premium > Enhanced > basic, then alpha within group.
+    voices.sort((a, b) => {
+      const score = v => (v.isSiri ? 0 : v.isPremium ? 1 : v.isEnhanced ? 2 : 3);
+      const sd = score(a) - score(b);
+      if (sd !== 0) return sd;
+      return a.name.localeCompare(b.name);
+    });
+    return voices;
+  } catch (_) { return []; }
+}
+
 function registerIpc() {
   ipcMain.handle('config:read', () => config.read());
   ipcMain.handle('config:write', (_e, cfg) => { config.write(cfg); refreshTray(); return { ok: true }; });
@@ -208,6 +241,19 @@ function registerIpc() {
   ipcMain.handle('test:channel', (_e, channelId, opts) => sendTest(channelId, opts || {}));
   ipcMain.handle('schema:channels', () => CHANNEL_DEFS);
   ipcMain.handle('schema:events', () => EVENT_DEFS);
+  ipcMain.handle('voices:list', () => listMacVoices());
+  ipcMain.handle('voices:open-settings', () => {
+    if (process.platform !== 'darwin') return { ok: false, error: 'macOS only' };
+    shell.openExternal('x-apple.systempreferences:com.apple.preference.universalaccess?Speech');
+    return { ok: true };
+  });
+  ipcMain.handle('voices:preview', (_e, voiceName, text) => {
+    if (process.platform !== 'darwin') return { ok: false, error: 'macOS only' };
+    if (!voiceName) return { ok: false, error: 'no voice selected' };
+    const args = ['-v', voiceName, '--', text || `Hello, this is ${voiceName.split(' (')[0]}.`];
+    spawn('say', args, { detached: true, stdio: 'ignore' }).unref();
+    return { ok: true };
+  });
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
     pluginRoot: PLUGIN_ROOT,
