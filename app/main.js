@@ -15,7 +15,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const config = require('./config');
 const { channels: CHANNEL_DEFS, events: EVENT_DEFS } = require('./channels');
-const { trayIconBuffer } = require('./icon');
+const { trayIconBuffer, trayIcon2xBuffer } = require('./icon');
 
 const isDev = process.argv.includes('--dev');
 let tray = null;
@@ -192,7 +192,14 @@ function openSettings() {
       sandbox: true,
     },
   });
-  settingsWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // In dev, point at the Vite dev server (CN_DEV_URL set by `npm run dev`).
+  // In production / pack, load the built static bundle.
+  const devUrl = process.env.CN_DEV_URL;
+  if (devUrl) {
+    settingsWindow.loadURL(devUrl);
+  } else {
+    settingsWindow.loadFile(path.join(__dirname, 'renderer', 'dist', 'index.html'));
+  }
   settingsWindow.once('ready-to-show', () => settingsWindow.show());
   if (isDev) settingsWindow.webContents.openDevTools({ mode: 'detach' });
   settingsWindow.on('closed', () => { settingsWindow = null; });
@@ -269,9 +276,14 @@ app.whenReady().then(() => {
   // Hide the dock icon on macOS — we're a tray app, not a windowed app.
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
-  const img = nativeImage.createFromBuffer(trayIconBuffer());
-  // Mark as macOS template so the OS auto-inverts in light/dark menubar.
-  if (process.platform === 'darwin') img.setTemplateImage(true);
+  // Build a Retina-aware colored tray icon. We add the 2x representation so
+  // the icon stays crisp on HiDPI displays. Template mode is OFF on purpose:
+  // we want the branded orange bell + red dot to read on every menubar.
+  const img = nativeImage.createFromBuffer(trayIconBuffer(), { width: 22, height: 22 });
+  img.addRepresentation({
+    width: 22, height: 22, scaleFactor: 2.0,
+    buffer: trayIcon2xBuffer(),
+  });
 
   tray = new Tray(img);
   refreshTray();

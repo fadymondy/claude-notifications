@@ -72,18 +72,22 @@ jobs:
           if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
         shell: bash
 
-      - name: Lint (node -c)
+      - name: Lint main-process scripts
         run: npm run lint
 
       - name: Smoke tests
         run: npm test
 
+      - name: Build renderer (Vite)
+        run: npm run build:renderer
+
       - name: Generate icons
         run: npm run icons
 
-      - name: Verify icon outputs exist
+      - name: Verify build outputs exist
         shell: bash
         run: |
           test -f build/icons/icon.png
           test -f build/icons/icon.ico
           test -f build/icons/icon.icns
+          test -f renderer/dist/index.html

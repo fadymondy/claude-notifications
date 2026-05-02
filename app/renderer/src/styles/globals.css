@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 18% 8%;
+    --foreground: 220 16% 90%;
+
+    --card: 222 18% 11%;
+    --card-foreground: 220 16% 90%;
+
+    --popover: 222 18% 13%;
+    --popover-foreground: 220 16% 90%;
+
+    --primary: 22 100% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 18% 16%;
+    --secondary-foreground: 220 16% 90%;
+
+    --muted: 222 18% 14%;
+    --muted-foreground: 220 10% 65%;
+
+    --accent: 22 100% 62%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 55% 50%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 222 16% 22%;
+    --input: 222 18% 14%;
+    --ring: 22 100% 62%;
+
+    --radius: 0.6rem;
+  }
+
+  /* Scoped to .dark only since Electron's prefers-color-scheme can't reach
+     the renderer reliably. We default the body to .dark and provide a light
+     override in case we add a toggle later. */
+  .light {
+    --background: 220 20% 97%;
+    --foreground: 222 18% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 18% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 18% 12%;
+    --primary: 18 80% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 222 18% 18%;
+    --muted: 220 14% 92%;
+    --muted-foreground: 222 12% 40%;
+    --accent: 18 80% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 145 55% 40%;
+    --success-foreground: 0 0% 100%;
+    --border: 220 14% 86%;
+    --input: 220 14% 92%;
+    --ring: 18 80% 50%;
+  }
+
+  * { border-color: hsl(var(--border)); }
+
+  html, body, #root { height: 100%; margin: 0; }
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+  ::-webkit-scrollbar-track { background: transparent; }
+}

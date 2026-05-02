@@ -15,20 +15,42 @@
     "url": "https://github.com/fadymondy/claude-notifications.git"
   },
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
+    "start": "npm run build:renderer && electron .",
+    "dev": "concurrently -k -n vite,electron -c blue,green \"vite\" \"wait-on tcp:5173 && CN_DEV_URL=http://localhost:5173 electron . --dev\"",
+    "build:renderer": "vite build",
     "test": "node test/smoke.js",
-    "lint": "node -c main.js && node -c preload.js && node -c renderer/app.js && node -c config.js && node -c channels.js && node -c icon.js",
+    "lint": "node -c main.js && node -c preload.js && node -c config.js && node -c channels.js && node -c icon.js",
     "icons": "node build/generate-icons.js",
-    "pack": "npm run icons && electron-builder --dir",
-    "dist": "npm run icons && electron-builder",
-    "dist:mac": "npm run icons && electron-builder --mac",
-    "dist:win": "npm run icons && electron-builder --win",
-    "dist:linux": "npm run icons && electron-builder --linux"
+    "pack": "npm run icons && npm run build:renderer && electron-builder --dir",
+    "dist": "npm run icons && npm run build:renderer && electron-builder",
+    "dist:mac": "npm run icons && npm run build:renderer && electron-builder --mac",
+    "dist:win": "npm run icons && npm run build:renderer && electron-builder --win",
+    "dist:linux": "npm run icons && npm run build:renderer && electron-builder --linux"
+  },
+  "dependencies": {
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-select": "^2.1.2",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.1.1",
+    "@radix-ui/react-tooltip": "^1.1.4",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
     "electron": "^32.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
   },
   "build": {
     "appId": "com.fadymondy.claude-notifications",
@@ -40,7 +62,8 @@
       "config.js",
       "channels.js",
       "icon.js",
-      "renderer/**/*",
+      "renderer/dist/**/*",
+      "renderer/assets/logo.svg",
       "build/icons/**/*"
     ],
     "directories": {
