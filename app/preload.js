@@ -16,4 +16,17 @@ contextBridge.exposeInMainWorld('cn', {
   openVoiceSettings: ()              => ipcRenderer.invoke('voices:open-settings'),
   previewVoice:  (name, text)        => ipcRenderer.invoke('voices:preview', name, text),
   appInfo:       ()                  => ipcRenderer.invoke('app:info'),
+
+  updater: {
+    state:           ()  => ipcRenderer.invoke('updater:state'),
+    check:           ()  => ipcRenderer.invoke('updater:check'),
+    download:        ()  => ipcRenderer.invoke('updater:download'),
+    install:         ()  => ipcRenderer.invoke('updater:install'),
+    openReleases:    ()  => ipcRenderer.invoke('updater:open-releases'),
+    onState: (cb) => {
+      const handler = (_e, state) => cb(state);
+      ipcRenderer.on('updater:state', handler);
+      return () => ipcRenderer.removeListener('updater:state', handler);
+    },
+  },
 });

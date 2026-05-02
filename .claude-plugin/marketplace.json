@@ -8,14 +8,14 @@
     "url": "https://github.com/fadymondy"
   },
   "metadata": {
-    "version": "0.1.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {
       "name": "claude-notifications",
       "source": "./",
       "description": "Send Claude Code hook events to Slack, Discord, email, WhatsApp, desktop (with voice via `say`), web push (ntfy / Pushover), and generic webhooks. Per-event routing, custom channel handlers, agent + skills + slash commands.",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "author": {
         "name": "Fady Mondy",
         "email": "engfadymondy@gmail.com",

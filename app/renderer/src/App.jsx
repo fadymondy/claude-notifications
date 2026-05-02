@@ -6,6 +6,7 @@ import { Field } from './components/Field';
 import { SetupSteps } from './components/SetupSteps';
 import { EventsGrid } from './components/EventsGrid';
 import { StatusBar } from './components/StatusBar';
+import { UpdateBanner } from './components/UpdateBanner';
 import { Play, Save } from 'lucide-react';
 
 function getPath(obj, path) {
@@ -211,6 +212,8 @@ export default function App() {
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <UpdateBanner currentVersion={info.version} />
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Configuration</CardTitle>

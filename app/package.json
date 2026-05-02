@@ -1,6 +1,6 @@
 {
   "name": "claude-notifications-tray",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Tray app for the claude-notifications Claude Code plugin — quick toggle channels, edit config, send test notifications.",
   "main": "main.js",
   "author": {
@@ -37,6 +37,8 @@
     "@resvg/resvg-js": "^2.6.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -74,26 +76,33 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "build/icons/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false,
+      "extendInfo": {
+        "LSUIElement": true,
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "mas": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        { "target": "mas", "arch": ["x64", "arm64"] }
       ],
       "icon": "build/icons/icon.icns",
       "hardenedRuntime": false,
-      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "provisioningProfile": "build/embedded.provisionprofile",
       "extendInfo": {
-        "LSUIElement": true
+        "LSUIElement": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "win": {

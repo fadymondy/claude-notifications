@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffa15a"/>
+      <stop offset="50%" stop-color="#ff8a3d"/>
+      <stop offset="100%" stop-color="#e26420"/>
+    </linearGradient>
+
+    <radialGradient id="topGlow" cx="50%" cy="0%" r="80%" fx="50%" fy="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="bellShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#5a2304" flood-opacity="0.30"/>
+    </filter>
+
+    <clipPath id="squircleClip">
+      <rect x="0" y="0" width="1024" height="1024" rx="225" ry="225"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircleClip)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#topGlow)"/>
+    <rect x="0" y="0" width="1024" height="2" fill="#ffffff" fill-opacity="0.35"/>
+  </g>
+
+  <rect x="0.5" y="0.5" width="1023" height="1023" rx="225" ry="225"
+        fill="none" stroke="#000" stroke-opacity="0.12" stroke-width="1"/>
+
+  <g filter="url(#bellShadow)" transform="translate(232, 220) scale(23.75)">
+    <path
+      fill="#ffffff"
+      d="M12 22c1.103 0 2-.897 2-2h-4c0 1.103.897 2 2 2zm7-7.414V10c0-3.217-2.185-5.927-5.145-6.742C13.562 2.52 12.846 2 12 2s-1.562.52-1.855 1.258C7.185 4.073 5 6.783 5 10v4.586l-1.707 1.707A.996.996 0 0 0 3 17v1a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-1a.996.996 0 0 0-.293-.707L19 14.586z"
+    />
+  </g>
+
+  <g transform="translate(720, 220)">
+    <circle cx="0" cy="0" r="80" fill="#e63946"/>
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#ffffff" stroke-opacity="0.92" stroke-width="14"/>
+    <circle cx="0" cy="0" r="22" fill="#ffffff" fill-opacity="0.95"/>
+  </g>
+</svg>

@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v0.2.0). Leave blank to use HEAD.'
+        description: 'Tag to build (e.g. v0.3.0). Leave blank to use HEAD.'
         required: false
 
 permissions:
@@ -27,15 +27,21 @@ jobs:
             artifacts: |
               app/dist/*.dmg
               app/dist/*.zip
+              app/dist/latest-mac.yml
+              app/dist/latest-mac.yaml
+              app/dist/latest-mac.json
           - os: windows-latest
             target: dist:win
             artifacts: |
               app/dist/*.exe
+              app/dist/*.blockmap
+              app/dist/latest.yml
           - os: ubuntu-latest
             target: dist:linux
             artifacts: |
               app/dist/*.AppImage
               app/dist/*.deb
+              app/dist/latest-linux.yml
     defaults:
       run:
         working-directory: app
@@ -58,13 +64,40 @@ jobs:
       - name: Smoke tests
         run: npm test
 
+      - name: Decode Apple signing certificate (macOS)
+        if: matrix.os == 'macos-latest' && env.MAC_CERTS != ''
+        env:
+          MAC_CERTS: ${{ secrets.MAC_CERTS }}
+        shell: bash
+        run: |
+          echo "$MAC_CERTS" | base64 --decode > /tmp/cert.p12
+          ls -la /tmp/cert.p12
+
       - name: Build distributables
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # electron-builder respects this for code signing skip on PRs / forks.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run ${{ matrix.target }} -- --publish never
+          # Apple Developer ID code signing — secrets are optional. When
+          # absent, electron-builder skips signing and produces an unsigned
+          # artifact (still installable, but Gatekeeper will warn).
+          CSC_LINK: ${{ secrets.MAC_CERTS && '/tmp/cert.p12' || '' }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          # Notarization (Apple-notarized DMG path).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Disable identity auto-discovery so missing certs don't half-sign.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTS != '' }}
+          # Windows code signing (optional — same pattern).
+          WIN_CSC_LINK: ${{ secrets.WIN_CERTS }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "Notarization credentials present — enabling."
+            # Toggle the notarize flag on via env injection.
+            export ELECTRON_BUILDER_EXTRA_ARGS=""
+          fi
+          npm run ${{ matrix.target }} -- --publish never
 
       - name: List build outputs
         shell: bash
@@ -77,6 +110,49 @@ jobs:
           path: ${{ matrix.artifacts }}
           if-no-files-found: warn
           retention-days: 14
+
+  build-mas:
+    name: Build Mac App Store (.pkg)
+    runs-on: macos-latest
+    if: |
+      startsWith(github.ref, 'refs/tags/') &&
+      vars.ENABLE_MAS_BUILD == 'true'
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install deps
+        run: npm ci
+
+      - name: Decode MAS signing artifacts
+        env:
+          MAS_CERTS: ${{ secrets.MAS_CERTS }}
+          MAS_PROVISIONING_PROFILE: ${{ secrets.MAS_PROVISIONING_PROFILE }}
+        shell: bash
+        run: |
+          echo "$MAS_CERTS" | base64 --decode > /tmp/mas.p12
+          echo "$MAS_PROVISIONING_PROFILE" | base64 --decode > build/embedded.provisionprofile
+
+      - name: Build .pkg for Mac App Store
+        env:
+          CSC_LINK: /tmp/mas.p12
+          CSC_KEY_PASSWORD: ${{ secrets.MAS_CERTS_PASSWORD }}
+          CSC_INSTALLER_LINK: /tmp/mas-installer.p12
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.MAS_INSTALLER_CERTS_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac mas --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-notifications-mas
+          path: app/dist/mas/*.pkg
+          if-no-files-found: warn
 
   release:
     name: Publish GitHub Release
@@ -94,7 +170,13 @@ jobs:
       - name: Flatten artifact tree
         run: |
           mkdir -p release-assets
-          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} release-assets/ \;
+          find artifacts -type f \( \
+            -name '*.dmg' -o -name '*.zip' \
+            -o -name '*.exe' -o -name '*.blockmap' \
+            -o -name '*.AppImage' -o -name '*.deb' \
+            -o -name 'latest-mac.yml' -o -name 'latest-mac.yaml' \
+            -o -name 'latest.yml' -o -name 'latest-linux.yml' \
+          \) -exec cp {} release-assets/ \;
           ls -la release-assets
 
       - name: Create GitHub Release

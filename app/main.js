@@ -16,6 +16,7 @@ const { spawn, spawnSync } = require('child_process');
 const config = require('./config');
 const { channels: CHANNEL_DEFS, events: EVENT_DEFS } = require('./channels');
 const { trayIconBuffer, trayIcon2xBuffer } = require('./icon');
+const updater = require('./updater');
 
 const isDev = process.argv.includes('--dev');
 let tray = null;
@@ -127,6 +128,9 @@ function buildTrayMenu() {
     },
   }));
 
+  const updaterState = updater.getState();
+  const updateItems = buildUpdateMenuItems(updaterState);
+
   const template = [
     { label: 'Claude Notifications', enabled: false },
     { label: status, enabled: false },
@@ -141,12 +145,52 @@ function buildTrayMenu() {
       } },
     { label: 'Open config file', click: () => shell.openPath(config.CONFIG_PATH) },
     { type: 'separator' },
+    ...updateItems,
     { label: PLUGIN_ROOT ? `Plugin: ${truncate(PLUGIN_ROOT, 40)}` : 'Plugin not detected', enabled: false },
     { type: 'separator' },
     { label: 'About', click: () => shell.openExternal('https://github.com/fadymondy/claude-notifications') },
     { label: 'Quit', accelerator: 'CommandOrControl+Q', role: 'quit' },
   ];
   return Menu.buildFromTemplate(template);
+}
+
+// Render the update section of the tray menu based on the current updater
+// state. The label changes from "Check for updates" → "Downloading… 42%" →
+// "Restart to install vX.Y.Z" so a glance at the menubar tells you where you
+// are without opening Settings.
+function buildUpdateMenuItems(state) {
+  const items = [];
+  switch (state?.phase) {
+    case 'checking':
+      items.push({ label: 'Checking for updates…', enabled: false });
+      break;
+    case 'available':
+      items.push({ label: `Update available — v${state.version}`, click: () => updater.downloadNow() });
+      break;
+    case 'downloading': {
+      const pct = state.percent != null ? `${Math.round(state.percent)}%` : '…';
+      items.push({ label: `Downloading update — ${pct}`, enabled: false });
+      break;
+    }
+    case 'downloaded':
+      items.push({ label: `Restart to install v${state.version}`, click: () => updater.quitAndInstall() });
+      break;
+    case 'error':
+      items.push({ label: `Update failed: ${truncate(state.error || '', 40)}`, click: () => updater.openLatestRelease() });
+      items.push({ label: 'Check again', click: () => updater.checkNow() });
+      break;
+    case 'unsupported':
+      // Dev mode or unsupported platform — just point at GitHub.
+      items.push({ label: 'View releases on GitHub', click: () => updater.openLatestRelease() });
+      break;
+    case 'up-to-date':
+    case 'idle':
+    default:
+      items.push({ label: 'Check for updates…', click: () => updater.checkNow() });
+      break;
+  }
+  items.push({ type: 'separator' });
+  return items;
 }
 
 function truncate(s, n) {
@@ -268,7 +312,24 @@ function registerIpc() {
     platform: process.platform,
     configPath: config.CONFIG_PATH,
     logPath: config.LOG_PATH,
+    updaterSupported: updater.isPackagedAndSupported(),
   }));
+
+  ipcMain.handle('updater:state',          () => updater.getState());
+  ipcMain.handle('updater:check',          () => updater.checkNow());
+  ipcMain.handle('updater:download',       () => updater.downloadNow());
+  ipcMain.handle('updater:install',        () => updater.quitAndInstall());
+  ipcMain.handle('updater:open-releases',  () => updater.openLatestRelease());
+
+  // Push state changes to every open window so the settings view stays live
+  // without polling. UI subscribes in preload via onUpdaterState().
+  updater.onState((state) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('updater:state', state);
+    }
+    // When an update lands, refresh the tray menu so its label flips.
+    refreshTray();
+  });
 }
 
 // --- Lifecycle ----------------------------------------------------------------
@@ -298,6 +359,11 @@ app.whenReady().then(() => {
       if (name === 'config.json') refreshTray();
     });
   } catch (_) { /* ignore — fs.watch is best-effort */ }
+
+  // Kick off the auto-updater. Runs once after a 10s delay then every 4h.
+  // No-op in dev (app.isPackaged === false) so we don't spam GitHub during
+  // development.
+  updater.start({ autoDownload: false });
 });
 
 // Don't quit when all windows close — tray app is the lifecycle anchor.

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Mac App Store entitlements: stricter than Developer ID. App-sandbox
+       is required, network access is requested explicitly. -->
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>$(TeamIdentifierPrefix)com.fadymondy.claude-notifications</string>
+  </array>
+  <!-- User-selected file read/write so the user can pick where to save
+       config or import a config file. -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>
