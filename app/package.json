@@ -84,6 +84,9 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
+      "notarize": {
+        "teamId": "JW9HJH86GC"
+      },
       "extendInfo": {
         "LSUIElement": true,
         "ITSAppUsesNonExemptEncryption": false
