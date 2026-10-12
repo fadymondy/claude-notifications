@@ -1,5 +1,9 @@
 # claude-notifications
 
+<!-- Product Hunt badge: hidden until the post launches (it 404s while a draft). On launch day, remove this comment wrapper.
+<a href="https://www.producthunt.com/posts/claude-notifications?embed=true&utm_source=badge-featured&utm_medium=badge&utm_source=badge-claude-notifications" target="_blank" rel="noopener"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1277748&theme=dark"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1277748&theme=light" alt="Claude Notifications - Featured on Product Hunt" width="250" height="54" loading="lazy" /></picture></a>
+-->
+
 A Claude Code plugin that sends notifications anywhere — Slack, Discord, email, WhatsApp, desktop (with voice via `say`), web push, and generic webhooks — driven by Claude Code's hook events. Ships with an optional Electron **tray app** for one-click channel toggling and visual configuration.
 
 [![test](https://github.com/fadymondy/claude-notifications/actions/workflows/test.yml/badge.svg)](https://github.com/fadymondy/claude-notifications/actions/workflows/test.yml)
