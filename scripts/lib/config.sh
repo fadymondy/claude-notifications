@@ -23,13 +23,24 @@ cn_log() {
   printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$cn_log_file"
 }
 
+# Native Windows jq.exe (Git Bash / MSYS / Cygwin) writes CRLF line endings,
+# so `jq -r` values come back as "desktop\r" / "true\r" and every comparison
+# or channel lookup fails. Strip the CRs there; a no-op everywhere else.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    jq() { command jq "$@" | tr -d '\r'; }
+    ;;
+esac
+
 # Merge config files into a single JSON object (right-most wins).
+# The accumulated JSON goes in on stdin rather than via <(...): native
+# Windows jq.exe can't open process-substitution paths like /proc/<pid>/fd/63.
 cn_load_config() {
   local merged='{}'
   for f in "$CN_DEFAULT_CONFIG" "$CN_USER_CONFIG" "$CN_PROJECT_CONFIG" "$CN_ENV_CONFIG"; do
     [ -z "$f" ] && continue
     [ -f "$f" ] || continue
-    merged=$(jq -s '.[0] * .[1]' <(printf '%s' "$merged") "$f" 2>/dev/null || printf '%s' "$merged")
+    merged=$(printf '%s' "$merged" | jq -s '.[0] * .[1]' - "$f" 2>/dev/null || printf '%s' "$merged")
   done
   printf '%s' "$merged"
 }
