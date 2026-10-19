@@ -63,20 +63,49 @@ cn_channel_enabled() {
   [ "$val" = "true" ]
 }
 
+# Routing rule shared by cn_channels_for_event and the routing cache:
+# events.<event> wins; otherwise every enabled channel whose events array
+# (default ["*"]) contains the event.
+# shellcheck disable=SC2016  # jq program, $ev is a jq variable
+CN_ROUTE_DEF='def cn_route($ev):
+  .events[$ev] // (
+    [.channels // {} | to_entries[]
+     | select(.value.enabled == true)
+     | select((.value.events // ["*"]) | (index($ev) or index("*")))
+     | .key]
+  );'
+
+# Every event hooks.json can send (plus manual sends from /notify).
+CN_ROUTE_EVENTS="notification stop subagent-stop session-start session-end user-prompt pre-tool post-tool manual"
+
 # Channels enabled for a specific event. If event-specific list missing,
 # fall back to channels.<name>.events array, else default to "all events".
 cn_channels_for_event() {
   local event="$1"
   local list
-  list=$(printf '%s' "$CN_CONFIG" | jq -r --arg ev "$event" '
-    .events[$ev] // (
-      [.channels // {} | to_entries[]
-       | select(.value.enabled == true)
-       | select((.value.events // ["*"]) | (index($ev) or index("*")))
-       | .key]
-    ) | .[]?
-  ' 2>/dev/null)
-  printf '%s\n' "$list"
+  list=$(printf '%s' "$CN_CONFIG" | jq -r --arg ev "$event" "$CN_ROUTE_DEF"' cn_route($ev) | .[]?' 2>/dev/null)
+  printf '%s
+' "$list"
+}
+
+# Write the routing cache notify.sh reads before doing any work: a signature
+# line (the config files that exist) followed by each event that routes to
+# no channel. Written to a temp file and moved so readers never see half.
+cn_write_route_cache() {
+  local file="$1" sig="$2" silent tmp
+  # shellcheck disable=SC2086  # CN_ROUTE_EVENTS is a space-separated list
+  silent=$(printf '%s' "$CN_CONFIG" | jq -r "$CN_ROUTE_DEF"'
+    . as $c | $ARGS.positional[] as $ev
+    | select([$c | cn_route($ev) | .[]?] | length == 0) | $ev
+  ' --args $CN_ROUTE_EVENTS 2>/dev/null) || return 0
+  mkdir -p "${file%/*}" 2>/dev/null || return 0
+  tmp="${file}.$$"
+  if { printf 'sig %s
+' "$sig"; [ -z "$silent" ] || printf '%s
+' "$silent"; } > "$tmp" 2>/dev/null; then
+    mv -f "$tmp" "$file" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+  fi
+  return 0
 }
 
 CN_CONFIG=$(cn_load_config)

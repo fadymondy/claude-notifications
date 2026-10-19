@@ -233,6 +233,14 @@ Common causes:
 - `say` not speaking → `voice.enabled: true` missing from config.
 - Hook didn't fire → `claude --debug hooks` to confirm Claude Code sees the hook bindings.
 
+On Windows PowerShell 5.1, read the log as UTF-8, otherwise the em dash in titles shows as mojibake (`â€”`):
+
+```powershell
+Get-Content -Encoding utf8 -Tail 50 -Wait $HOME\.claude-notifications\logs\notify.log
+```
+
+Events with no channel configured (by default `pre-tool`, `post-tool`, `user-prompt`, `session-start`, `session-end`) exit before doing any work and leave no log line. The routing behind that is cached in `~/.claude-notifications/cache/routing` and rebuilt whenever a config file changes; set `CN_NO_CACHE=1` to bypass it while debugging.
+
 ## Requirements
 
 **Plugin (bash dispatcher):**
