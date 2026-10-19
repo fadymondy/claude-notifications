@@ -1,6 +1,6 @@
 {
   "name": "claude-notifications",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Multi-channel notification system for Claude Code — email, Slack, Discord, WhatsApp, desktop (with voice), web push, and generic webhooks. Routes Claude Code hook events anywhere.",
   "author": {
     "name": "Fady Mondy",

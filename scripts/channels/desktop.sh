@@ -140,6 +140,7 @@ case "$uname_s" in
       if command -v "$c" >/dev/null 2>&1; then ps_exe="$c"; break; fi
     done
     if [ -n "$ps_exe" ]; then
+      # shellcheck disable=SC2016  # PowerShell source; $vars are PowerShell's
       ps_script='
 $t = $env:CN_TOAST_TITLE; $b = $env:CN_TOAST_BODY
 if (-not $b) { $b = " " }
