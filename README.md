@@ -7,6 +7,8 @@ A Claude Code plugin that sends notifications anywhere — Slack, Discord, email
 
 When Claude finishes a task, gets stuck waiting for input, or runs a tool you care about, this plugin fans the event out to whichever channels you've enabled. You walk away from the terminal and still get pinged.
 
+Read the launch article: [Claude Code notifications on Slack, Discord, WhatsApp or voice](https://notifications.fadymondy.com/en/blog/claude-code-notifications-slack-discord-whatsapp-voice).
+
 ## What you get
 
 | Channel    | Purpose                                                              | Required setup                          |
