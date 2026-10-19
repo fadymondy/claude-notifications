@@ -2,7 +2,9 @@
 # desktop.sh — Native desktop notifications.
 # macOS:  osascript display notification + optional `say` voice.
 # Linux:  notify-send (libnotify) + optional `spd-say` / `espeak`.
-# Windows: PowerShell BurntToast fallback when invoked from WSL/Git Bash.
+# Windows: non-blocking toast via PowerShell (Git Bash / MSYS / Cygwin / WSL) —
+#          BurntToast if installed, else a WinRT ToastNotificationManager
+#          toast, else a MessageBox. Runs detached, so this returns at once.
 #
 # Config:
 #   "desktop": {
@@ -17,11 +19,20 @@ set -uo pipefail
 title="${CN_TITLE:-Claude}"
 body="${CN_BODY:-}"
 
-voice_enabled=$(cn_get '.channels.desktop.voice.enabled')
-voice_name=$(cn_get '.channels.desktop.voice.name' CN_VOICE_NAME)
-voice_rate=$(cn_get '.channels.desktop.voice.rate' CN_VOICE_RATE)
-voice_text=$(cn_get '.channels.desktop.voice.text')
-sound=$(cn_get '.channels.desktop.sound')
+# Read every desktop field in ONE jq call — each jq spawn costs ~0.15 s on
+# Windows/Git Bash. Fields are joined with \x1f (a non-whitespace IFS, so
+# empty fields are kept in place).
+voice_enabled="" voice_name="" voice_rate="" voice_text="" sound="" voice_style=""
+IFS=$'\x1f' read -r voice_enabled voice_name voice_rate voice_text sound voice_style < <(
+  printf '%s' "$CN_CONFIG" | jq -r '
+    .channels.desktop // {}
+    | [.voice.enabled, .voice.name, .voice.rate, .voice.text, .sound, .voice.style]
+    | map(if . == null then "" else tostring | gsub("[\n\u001f]"; " ") end)
+    | join("\u001f")
+  ' 2>/dev/null
+)
+[ -n "${CN_VOICE_NAME:-}" ] && voice_name="$CN_VOICE_NAME"
+[ -n "${CN_VOICE_RATE:-}" ] && voice_rate="$CN_VOICE_RATE"
 
 # Per-event audio file. The tray app stores user uploads as
 # ~/.claude-notifications/audio/desktop/<event>.<ext>. When a file exists for
@@ -43,8 +54,7 @@ if [ "$voice_enabled" = "true" ]; then
   if [ -n "$voice_text" ]; then
     spoken="$voice_text"
   else
-    style=$(cn_get '.channels.desktop.voice.style')
-    case "$style" in
+    case "$voice_style" in
       title) spoken="$title" ;;
       body)  spoken="$body" ;;
       both)  spoken="${title}. ${body}" ;;
@@ -121,11 +131,52 @@ case "$uname_s" in
     fi
     ;;
   *)
-    # Windows / WSL fallback.
-    if command -v powershell.exe >/dev/null 2>&1; then
-      esc_title=$(printf '%s' "$title" | sed "s/'/''/g")
-      esc_body=$(printf '%s' "$body" | sed "s/'/''/g")
-      powershell.exe -NoProfile -Command "[reflection.assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Windows.Forms.MessageBox]::Show('${esc_body}','${esc_title}')" >/dev/null 2>&1 || true
+    # Windows (Git Bash / MSYS / Cygwin / WSL). Fire-and-forget: PowerShell
+    # alone takes ~1 s to start, and notify.sh kills channels after 5 s, so
+    # the toast runs fully detached and this script returns immediately.
+    # Title/body travel via env vars, so no quoting/escaping is needed.
+    ps_exe=""
+    for c in powershell.exe pwsh.exe; do
+      if command -v "$c" >/dev/null 2>&1; then ps_exe="$c"; break; fi
+    done
+    if [ -n "$ps_exe" ]; then
+      ps_script='
+$t = $env:CN_TOAST_TITLE; $b = $env:CN_TOAST_BODY
+if (-not $b) { $b = " " }
+try {
+  if (Get-Module -ListAvailable -Name BurntToast) {
+    Import-Module BurntToast -ErrorAction Stop
+    New-BurntToastNotification -Text $t, $b -ErrorAction Stop
+    exit 0
+  }
+} catch {}
+try {
+  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+  $x = New-Object Windows.Data.Xml.Dom.XmlDocument
+  $x.LoadXml("<toast><visual><binding template=`"ToastGeneric`"><text/><text/></binding></visual></toast>")
+  $n = $x.GetElementsByTagName("text")
+  $n.Item(0).AppendChild($x.CreateTextNode($t)) | Out-Null
+  $n.Item(1).AppendChild($x.CreateTextNode($b)) | Out-Null
+  $app = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app).Show([Windows.UI.Notifications.ToastNotification]::new($x))
+} catch {
+  Add-Type -AssemblyName System.Windows.Forms
+  [System.Windows.Forms.MessageBox]::Show($b, $t) | Out-Null
+}'
+      # Everything below runs in a detached subshell, so even the encoding
+      # forks stay off the hook's critical path. -EncodedCommand (UTF-16LE
+      # base64) sidesteps MSYS argument mangling.
+      (
+        ps_args=(-Command "$ps_script")
+        if command -v iconv >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1; then
+          enc=$(printf '%s' "$ps_script" | iconv -f UTF-8 -t UTF-16LE 2>/dev/null | base64 | tr -d '\r\n')
+          [ -n "$enc" ] && ps_args=(-EncodedCommand "$enc")
+        fi
+        CN_TOAST_TITLE="$title" CN_TOAST_BODY="$body" \
+          exec "$ps_exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden "${ps_args[@]}"
+      ) </dev/null >/dev/null 2>&1 &
+      disown 2>/dev/null || true
     fi
     ;;
 esac
