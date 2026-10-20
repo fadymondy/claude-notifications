@@ -273,6 +273,12 @@ npm start
 
 CI runs on every push: shellcheck on every channel handler, JSON validation, plugin manifest validation, and the Electron app's smoke tests on Linux/macOS/Windows × Node 20/22. Tagged commits (`vX.Y.Z`) trigger a release build that produces installers for all three OSes and uploads them to GitHub Releases.
 
+## Sponsor
+
+Made by the creator of **[ToGO](https://github.com/togo-framework/togo)**: the best way to support it is to **[sponsor ToGO →](https://to-go.dev/sponsor)**
+
+Or back claude-notifications directly on Open Collective: **[opencollective.com/claude-notifications →](https://opencollective.com/claude-notifications)**
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
